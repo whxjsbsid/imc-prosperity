@@ -6,6 +6,14 @@ class Trader:
 
     def bid(self):
         return 15
+
+    if state.traderData:
+            prev_data = json.loads(state.traderData)
+        else:
+            prev_data = {}
+
+        # Store current tick prices to send forward
+        new_data = {}
     
     def run(self, state: TradingState):
         """Only method required. It takes all buy and sell orders for all
@@ -17,9 +25,15 @@ class Trader:
         # Orders to be placed on exchange matching engine
         result = {}
         for product in state.order_depths:
+            if product == "EMARALDS":
+                acceptable_price = 10000
+            elif product == "TOMATOES":
+                acceptable_price = prev_data.get("TOMATOES", current_mid)
+            else:
+                acceptable_price = current_mid
+                
             order_depth: OrderDepth = state.order_depths[product]
             orders: List[Order] = []
-            acceptable_price = 10  # Participant should calculate this value
             print("Acceptable price : " + str(acceptable_price))
             print("Buy Order depth : " + str(len(order_depth.buy_orders)) + ", Sell order depth : " + str(len(order_depth.sell_orders)))
     
