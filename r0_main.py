@@ -1,41 +1,67 @@
 from datamodel import OrderDepth, UserId, TradingState, Order
-from typing import List
+from typing import List, Dict
 import json
 
 
 class Trader:
+    POSITION_LIMITS = {
+        "EMERALDS": 100,   # replace if your round uses a different limit
+        "TOMATOES": 100,   # replace if your round uses a different limit
+    }
+
+    EMERALDS_FAIR_VALUE = 10000
+    EMERALDS_MM_SIZE = 5
+    TOMATOES_MA_WINDOW = 10
 
     def bid(self):
         return 15
 
     def run(self, state: TradingState):
-        """Only method required. It takes all buy and sell orders for all
-        symbols as an input, and outputs a list of orders to be sent."""
-
         print("traderData: " + state.traderData)
         print("Observations: " + str(state.observations))
 
-        # Load previous tick data
+        # ----------------------------
+        # Load traderData safely
+        # ----------------------------
         if state.traderData:
-            prev_data = json.loads(state.traderData)
+            try:
+                prev_data = json.loads(state.traderData)
+            except json.JSONDecodeError:
+                prev_data = {}
         else:
             prev_data = {}
 
-        # Store current tick prices for next run
-        new_data = {}
+        # traderData format:
+        # {
+        #   "price_history": {
+        #       "TOMATOES": [....]
+        #   }
+        # }
+        price_history = prev_data.get("price_history", {})
 
-        # Orders to be placed on exchange matching engine
-        result = {}
+        # backward compatibility with old format {"TOMATOES": current_mid}
+        if "TOMATOES" not in price_history:
+            old_tomato = prev_data.get("TOMATOES")
+            if isinstance(old_tomato, (int, float)):
+                price_history["TOMATOES"] = [old_tomato]
+            else:
+                price_history["TOMATOES"] = []
+
+        result: Dict[str, List[Order]] = {}
 
         for product in state.order_depths:
             order_depth: OrderDepth = state.order_depths[product]
             orders: List[Order] = []
 
-            # Safely get best bid / best ask
+            position = state.position.get(product, 0)
+            limit = self.POSITION_LIMITS.get(product, 20)
+
+            buy_capacity = limit - position
+            sell_capacity = limit + position
+
             best_bid = max(order_depth.buy_orders.keys()) if order_depth.buy_orders else None
             best_ask = min(order_depth.sell_orders.keys()) if order_depth.sell_orders else None
 
-            # Current mid price
             current_mid = None
             if best_bid is not None and best_ask is not None:
                 current_mid = (best_bid + best_ask) / 2
@@ -44,42 +70,138 @@ class Trader:
             elif best_ask is not None:
                 current_mid = best_ask
 
-            # Fair value logic
+            # ============================================================
+            # EMERALDS: fixed fair value + market making
+            # ============================================================
             if product == "EMERALDS":
-                acceptable_price = 10000
+                acceptable_price = self.EMERALDS_FAIR_VALUE
+
+                print(f"{product} acceptable price: {acceptable_price}")
+                print(
+                    f"Position: {position}, Buy cap: {buy_capacity}, Sell cap: {sell_capacity}"
+                )
+
+                # 1. Take all asks below fair value
+                for ask_price in sorted(order_depth.sell_orders.keys()):
+                    if buy_capacity <= 0:
+                        break
+
+                    ask_volume = -order_depth.sell_orders[ask_price]  # make positive
+                    if ask_price < acceptable_price:
+                        qty = min(ask_volume, buy_capacity)
+                        if qty > 0:
+                            print("TAKE BUY", f"{qty}x", ask_price)
+                            orders.append(Order(product, ask_price, qty))
+                            buy_capacity -= qty
+                    else:
+                        break
+
+                # 2. Take all bids above fair value
+                for bid_price in sorted(order_depth.buy_orders.keys(), reverse=True):
+                    if sell_capacity <= 0:
+                        break
+
+                    bid_volume = order_depth.buy_orders[bid_price]
+                    if bid_price > acceptable_price:
+                        qty = min(bid_volume, sell_capacity)
+                        if qty > 0:
+                            print("TAKE SELL", f"{qty}x", bid_price)
+                            orders.append(Order(product, bid_price, -qty))
+                            sell_capacity -= qty
+                    else:
+                        break
+
+                # 3. Market make inside the spread
+                if best_bid is not None and best_ask is not None:
+                    spread = best_ask - best_bid
+
+                    # quote inside the spread only if spread is wide enough
+                    if spread >= 2:
+                        buy_quote = best_bid + 1
+                        sell_quote = best_ask - 1
+
+                        # keep quotes on correct side of fair value
+                        buy_quote = min(buy_quote, acceptable_price - 1)
+                        sell_quote = max(sell_quote, acceptable_price + 1)
+
+                        if buy_quote < sell_quote:
+                            mm_buy_size = min(self.EMERALDS_MM_SIZE, buy_capacity)
+                            mm_sell_size = min(self.EMERALDS_MM_SIZE, sell_capacity)
+
+                            if mm_buy_size > 0:
+                                print("MM BUY", f"{mm_buy_size}x", buy_quote)
+                                orders.append(Order(product, buy_quote, mm_buy_size))
+
+                            if mm_sell_size > 0:
+                                print("MM SELL", f"{mm_sell_size}x", sell_quote)
+                                orders.append(Order(product, sell_quote, -mm_sell_size))
+
+            # ============================================================
+            # TOMATOES: 10-tick moving average
+            # ============================================================
             elif product == "TOMATOES":
-                acceptable_price = prev_data.get("TOMATOES", current_mid)
+                tomato_history = price_history.get("TOMATOES", [])
+
+                if current_mid is not None:
+                    tomato_history.append(current_mid)
+                    tomato_history = tomato_history[-self.TOMATOES_MA_WINDOW:]
+
+                price_history["TOMATOES"] = tomato_history
+
+                if tomato_history:
+                    acceptable_price = sum(tomato_history) / len(tomato_history)
+                else:
+                    acceptable_price = current_mid
+
+                print(f"{product} acceptable price (10-tick MA): {acceptable_price}")
+                print(
+                    f"Position: {position}, Buy cap: {buy_capacity}, Sell cap: {sell_capacity}"
+                )
+
+                if acceptable_price is not None:
+                    # Buy asks below MA
+                    for ask_price in sorted(order_depth.sell_orders.keys()):
+                        if buy_capacity <= 0:
+                            break
+
+                        ask_volume = -order_depth.sell_orders[ask_price]
+                        if ask_price < acceptable_price:
+                            qty = min(ask_volume, buy_capacity)
+                            if qty > 0:
+                                print("BUY", f"{qty}x", ask_price)
+                                orders.append(Order(product, ask_price, qty))
+                                buy_capacity -= qty
+                        else:
+                            break
+
+                    # Sell bids above MA
+                    for bid_price in sorted(order_depth.buy_orders.keys(), reverse=True):
+                        if sell_capacity <= 0:
+                            break
+
+                        bid_volume = order_depth.buy_orders[bid_price]
+                        if bid_price > acceptable_price:
+                            qty = min(bid_volume, sell_capacity)
+                            if qty > 0:
+                                print("SELL", f"{qty}x", bid_price)
+                                orders.append(Order(product, bid_price, -qty))
+                                sell_capacity -= qty
+                        else:
+                            break
+
+            # ============================================================
+            # Other products: do nothing
+            # ============================================================
             else:
-                acceptable_price = current_mid
-
-            print(f"{product} acceptable price: {acceptable_price}")
-            print(
-                f"Buy Order depth: {len(order_depth.buy_orders)}, "
-                f"Sell order depth: {len(order_depth.sell_orders)}"
-            )
-
-            # Buy if best ask is below acceptable price
-            if best_ask is not None:
-                best_ask_amount = order_depth.sell_orders[best_ask]
-                if best_ask < acceptable_price:
-                    print("BUY", str(-best_ask_amount) + "x", best_ask)
-                    orders.append(Order(product, best_ask, -best_ask_amount))
-
-            # Sell if best bid is above acceptable price
-            if best_bid is not None:
-                best_bid_amount = order_depth.buy_orders[best_bid]
-                if best_bid > acceptable_price:
-                    print("SELL", str(best_bid_amount) + "x", best_bid)
-                    orders.append(Order(product, best_bid, -best_bid_amount))
+                print(f"{product}: no strategy")
+                pass
 
             result[product] = orders
 
-            # Save current mid for next tick
-            if current_mid is not None:
-                new_data[product] = current_mid
-
-        # Save data into traderData for next execution
-        traderData = json.dumps(new_data)
+        # Save updated traderData
+        traderData = json.dumps({
+            "price_history": price_history
+        })
 
         conversions = 0
         return result, conversions, traderData
