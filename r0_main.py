@@ -120,8 +120,8 @@ class Trader:
                     and best_ask is not None
                     and best_bid < acceptable_price < best_ask
                 ):
-                    buy_quote = best_bid + 1
-                    sell_quote = best_ask - 1
+                    buy_quote = best_bid + 4
+                    sell_quote = best_ask - 4
             
                     if buy_quote < sell_quote:
                         mm_size = 5
