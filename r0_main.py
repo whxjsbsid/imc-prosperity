@@ -74,19 +74,22 @@ class Trader:
             # EMERALDS: fixed fair value + market making
             # ============================================================
             if product == "EMERALDS":
-                acceptable_price = self.EMERALDS_FAIR_VALUE
-
+                acceptable_price = 10000
+                position = state.position.get(product, 0)
+                limit = self.POSITION_LIMITS[product]
+            
+                buy_capacity = limit - position
+                sell_capacity = limit + position
+            
                 print(f"{product} acceptable price: {acceptable_price}")
-                print(
-                    f"Position: {position}, Buy cap: {buy_capacity}, Sell cap: {sell_capacity}"
-                )
-
+                print(f"Position: {position}, Buy cap: {buy_capacity}, Sell cap: {sell_capacity}")
+            
                 # 1. Take all asks below fair value
                 for ask_price in sorted(order_depth.sell_orders.keys()):
                     if buy_capacity <= 0:
                         break
-
-                    ask_volume = -order_depth.sell_orders[ask_price]  # make positive
+            
+                    ask_volume = -order_depth.sell_orders[ask_price]
                     if ask_price < acceptable_price:
                         qty = min(ask_volume, buy_capacity)
                         if qty > 0:
@@ -95,12 +98,12 @@ class Trader:
                             buy_capacity -= qty
                     else:
                         break
-
+            
                 # 2. Take all bids above fair value
                 for bid_price in sorted(order_depth.buy_orders.keys(), reverse=True):
                     if sell_capacity <= 0:
                         break
-
+            
                     bid_volume = order_depth.buy_orders[bid_price]
                     if bid_price > acceptable_price:
                         qty = min(bid_volume, sell_capacity)
@@ -110,31 +113,28 @@ class Trader:
                             sell_capacity -= qty
                     else:
                         break
-
-                # 3. Market make inside the spread
-                if best_bid is not None and best_ask is not None:
-                    spread = best_ask - best_bid
-
-                    # quote inside the spread only if spread is wide enough
-                    if spread >= 2:
-                        buy_quote = best_bid + 1
-                        sell_quote = best_ask - 1
-
-                        # keep quotes on correct side of fair value
-                        buy_quote = min(buy_quote, acceptable_price - 1)
-                        sell_quote = max(sell_quote, acceptable_price + 1)
-
-                        if buy_quote < sell_quote:
-                            mm_buy_size = min(self.EMERALDS_MM_SIZE, buy_capacity)
-                            mm_sell_size = min(self.EMERALDS_MM_SIZE, sell_capacity)
-
-                            if mm_buy_size > 0:
-                                print("MM BUY", f"{mm_buy_size}x", buy_quote)
-                                orders.append(Order(product, buy_quote, mm_buy_size))
-
-                            if mm_sell_size > 0:
-                                print("MM SELL", f"{mm_sell_size}x", sell_quote)
-                                orders.append(Order(product, sell_quote, -mm_sell_size))
+            
+                # 3. Market make only if the book still straddles fair value
+                if (
+                    best_bid is not None
+                    and best_ask is not None
+                    and best_bid < acceptable_price < best_ask
+                ):
+                    buy_quote = best_bid + 1
+                    sell_quote = best_ask - 1
+            
+                    if buy_quote < sell_quote:
+                        mm_size = 5
+            
+                        if buy_capacity > 0:
+                            qty = min(mm_size, buy_capacity)
+                            print("MM BUY", f"{qty}x", buy_quote)
+                            orders.append(Order(product, buy_quote, qty))
+            
+                        if sell_capacity > 0:
+                            qty = min(mm_size, sell_capacity)
+                            print("MM SELL", f"{qty}x", sell_quote)
+                            orders.append(Order(product, sell_quote, -qty))
 
             # ============================================================
             # TOMATOES: 10-tick moving average
