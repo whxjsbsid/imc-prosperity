@@ -11,7 +11,7 @@ class Trader:
 
     EMERALDS_FAIR_VALUE = 10000
     EMERALDS_MM_SIZE = 5
-    TOMATOES_MA_WINDOW = 10
+    TOMATOES_MA_WINDOW = 20
 
     def bid(self):
         return 15
@@ -120,8 +120,8 @@ class Trader:
                     and best_ask is not None
                     and best_bid < acceptable_price < best_ask
                 ):
-                    buy_quote = best_bid + 4
-                    sell_quote = best_ask - 4
+                    buy_quote = best_bid + 1
+                    sell_quote = best_ask - 1
             
                     if buy_quote < sell_quote:
                         mm_size = 5
