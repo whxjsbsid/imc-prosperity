@@ -10,7 +10,7 @@ class Trader:
         "INTARIAN_PEPPER_ROOT": 80,
     }
 
-    DAY_END = 999900
+    DAY_END = 10000
 
     OSMIUM_FAIR = 10000
     OSMIUM_PASSIVE_SIZE = 20
