@@ -10,7 +10,7 @@ class Trader:
         "INTARIAN_PEPPER_ROOT": 80,
     }
 
-    DAY_END = 1_000_000
+    DAY_END = 20000
 
     def run(self, state: TradingState):
         result = {}
