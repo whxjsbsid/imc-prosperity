@@ -6,8 +6,8 @@ from typing import List, Dict, Any
 
 class Trader:
     LIMITS = {
-        "ASH_COATED_OSMIUM": 80,
-        "INTARIAN_PEPPER_ROOT": 80,
+        "ASH_COATED_OSMIUM": 1000,
+        "INTARIAN_PEPPER_ROOT": 1000,
     }
 
     DAY_END = 20000
