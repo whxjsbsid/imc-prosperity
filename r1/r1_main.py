@@ -1,5 +1,4 @@
 import json
-import math
 from datamodel import OrderDepth, TradingState, Order
 from typing import List, Dict, Any
 
@@ -10,21 +9,20 @@ class Trader:
         "INTARIAN_PEPPER_ROOT": 80,
     }
 
-    DAY_END = 10000
-
+    # ASH_COATED_OSMIUM: Fixed fair value logic
     OSMIUM_FAIR = 10000
     OSMIUM_PASSIVE_SIZE = 20
     OSMIUM_FLATTEN_THRESHOLD = 50
 
-    ROOT_TAKE_EDGE = 3
-    ROOT_MAKE_EDGE = 1
-    ROOT_PASSIVE_SIZE = 12
+    # INTARIAN_PEPPER_ROOT: accumulate 40 units on each of the first 2 ticks
+    ROOT_BUY_PER_TICK = 40
+    ROOT_NUM_BUY_TICKS = 2
 
     def bid(self):
         return 15
 
     def run(self, state: TradingState):
-        result = {}
+        result: Dict[str, List[Order]] = {}
         conversions = 0
 
         if state.traderData:
@@ -35,12 +33,17 @@ class Trader:
         else:
             data = {}
 
+        # Track how many root accumulation ticks have already been used.
+        if "root_buy_ticks_done" not in data:
+            data["root_buy_ticks_done"] = 0
+
         for product, order_depth in state.order_depths.items():
             if product not in self.LIMITS:
                 continue
 
             orders: List[Order] = []
 
+            # Need both sides of the book for these strategies.
             if len(order_depth.buy_orders) == 0 or len(order_depth.sell_orders) == 0:
                 result[product] = orders
                 continue
@@ -48,10 +51,9 @@ class Trader:
             limit = self.LIMITS[product]
             best_bid = max(order_depth.buy_orders.keys())
             best_ask = min(order_depth.sell_orders.keys())
-            mid_price = (best_bid + best_ask) / 2
 
-            position = state.position.get(product, 0)
-            net_pos = position
+            current_position = state.position.get(product, 0)
+            net_pos = current_position
             buy_capacity = limit - net_pos
             sell_capacity = limit + net_pos
 
@@ -73,13 +75,10 @@ class Trader:
                     sell_capacity -= qty
                     buy_capacity += qty
 
-            # --------------------------------------------------
-            # ASH_COATED_OSMIUM: Rainforest-style fixed-fair logic
-            # --------------------------------------------------
             if product == "ASH_COATED_OSMIUM":
                 fair_value = self.OSMIUM_FAIR
 
-                # 1) Immediately take favorable trades
+                # 1) Immediately take favorable trades.
                 for ask_price, ask_volume in sorted(order_depth.sell_orders.items()):
                     if buy_capacity <= 0:
                         break
@@ -96,16 +95,15 @@ class Trader:
                     else:
                         break
 
-                # 2) Flatten at exactly fair value if inventory is too skewed
+                # 2) Flatten at exactly fair value if inventory is too skewed.
                 if net_pos >= self.OSMIUM_FLATTEN_THRESHOLD and sell_capacity > 0:
                     flatten_qty = min(net_pos, self.OSMIUM_PASSIVE_SIZE)
                     add_sell(fair_value, flatten_qty)
-
                 elif net_pos <= -self.OSMIUM_FLATTEN_THRESHOLD and buy_capacity > 0:
                     flatten_qty = min(-net_pos, self.OSMIUM_PASSIVE_SIZE)
                     add_buy(fair_value, flatten_qty)
 
-                # 3) Passive quoting: overbid / undercut while keeping positive edge
+                # 3) Passive quoting: overbid / undercut while keeping positive edge.
                 improved_bid = best_bid + 1
                 improved_ask = best_ask - 1
 
@@ -130,65 +128,15 @@ class Trader:
                             sell_size = max(0, sell_size - (-net_pos) // 8)
                         add_sell(improved_ask, sell_size)
 
-            # --------------------------------------------------
-            # INTARIAN_PEPPER_ROOT: linear-ramp fair value logic
-            # --------------------------------------------------
             elif product == "INTARIAN_PEPPER_ROOT":
-                if "root_first_mid" not in data:
-                    data["root_first_mid"] = mid_price
-                    data["root_first_ts"] = state.timestamp
+                if buy_capacity > 0:
+                    for ask_price, ask_volume in sorted(order_depth.sell_orders.items()):
+                        if buy_capacity <= 0:
+                            break
 
-                first_mid = float(data["root_first_mid"])
-                first_ts = int(data["root_first_ts"])
-
-                denom = max(1, self.DAY_END - first_ts)
-                progress = (state.timestamp - first_ts) / denom
-                progress = max(0.0, min(1.0, progress))
-
-                fair_value = first_mid + 1000.0 * progress
-
-                # 1) Take obvious mean-reversion opportunities
-                for ask_price, ask_volume in sorted(order_depth.sell_orders.items()):
-                    if buy_capacity <= 0:
-                        break
-                    if ask_price <= fair_value - self.ROOT_TAKE_EDGE:
-                        add_buy(ask_price, -ask_volume)
-                    else:
-                        break
-
-                for bid_price, bid_volume in sorted(order_depth.buy_orders.items(), reverse=True):
-                    if sell_capacity <= 0:
-                        break
-                    if bid_price >= fair_value + self.ROOT_TAKE_EDGE:
-                        add_sell(bid_price, bid_volume)
-                    else:
-                        break
-
-                # 2) Passive quotes around the moving fair value
-                inventory_adjust = net_pos / 20.0
-
-                buy_quote = math.floor(fair_value - self.ROOT_MAKE_EDGE - inventory_adjust)
-                sell_quote = math.ceil(fair_value + self.ROOT_MAKE_EDGE - inventory_adjust)
-
-                # Keep quotes passive
-                buy_quote = min(buy_quote, best_ask - 1)
-                sell_quote = max(sell_quote, best_bid + 1)
-
-                if buy_capacity > 0 and buy_quote > 0:
-                    buy_size = self.ROOT_PASSIVE_SIZE
-                    if net_pos > 0:
-                        buy_size = max(0, buy_size - net_pos // 10)
-                    elif net_pos < 0:
-                        buy_size = buy_size + (-net_pos) // 10
-                    add_buy(buy_quote, buy_size)
-
-                if sell_capacity > 0 and sell_quote > 0:
-                    sell_size = self.ROOT_PASSIVE_SIZE
-                    if net_pos > 0:
-                        sell_size = sell_size + net_pos // 10
-                    elif net_pos < 0:
-                        sell_size = max(0, sell_size - (-net_pos) // 10)
-                    add_sell(sell_quote, sell_size)
+                        take_qty = min(buy_capacity, -ask_volume)
+                        if take_qty > 0:
+                            add_buy(ask_price, take_qty)
 
             result[product] = orders
 
