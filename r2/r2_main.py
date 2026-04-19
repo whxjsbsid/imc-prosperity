@@ -72,7 +72,7 @@ class Trader:
                 sell_capacity -= qty
                 buy_capacity += qty
 
-        # 1) Take favorable asks below fair value.
+        # Take asks below fair value.
         for ask_price, ask_volume in sorted(order_depth.sell_orders.items()):
             if buy_capacity <= 0:
                 break
@@ -81,7 +81,7 @@ class Trader:
             else:
                 break
 
-        # 1) Take favorable bids above fair value.
+        # Take bids above fair value.
         for bid_price, bid_volume in sorted(order_depth.buy_orders.items(), reverse=True):
             if sell_capacity <= 0:
                 break
@@ -90,7 +90,7 @@ class Trader:
             else:
                 break
 
-        # 2) Flatten inventory when position is too skewed.
+        # Flatten inventory if position becomes too skewed.
         if net_pos >= self.OSMIUM_FLATTEN_THRESHOLD and sell_capacity > 0:
             flatten_qty = min(net_pos, self.OSMIUM_PASSIVE_SIZE)
             add_sell(fair_value, flatten_qty)
@@ -98,7 +98,7 @@ class Trader:
             flatten_qty = min(-net_pos, self.OSMIUM_PASSIVE_SIZE)
             add_buy(fair_value, flatten_qty)
 
-        # 3) Passive one-tick-inside quotes if both sides of the book exist.
+        # Post one-tick-inside passive quotes if both sides of the book exist.
         if order_depth.buy_orders and order_depth.sell_orders:
             best_bid = max(order_depth.buy_orders.keys())
             best_ask = min(order_depth.sell_orders.keys())
@@ -137,29 +137,26 @@ class Trader:
     ) -> List[Order]:
         """
         ROOT logic:
-        Aggressively buy available asks until position limit is reached.
-        No tick-based restriction is applied.
+        Buy only the current best ask each tick, capped by the remaining
+        position capacity up to the 80-unit limit.
         """
         orders: List[Order] = []
 
         limit = self.LIMITS[product]
         current_position = state.position.get(product, 0)
+        buy_capacity = limit - current_position
 
-        net_pos = current_position
-        buy_capacity = limit - net_pos
+        if buy_capacity <= 0:
+            return orders
 
-        def add_buy(price: int, qty: int):
-            nonlocal net_pos, buy_capacity
-            qty = int(max(0, min(qty, buy_capacity)))
-            if qty > 0:
-                orders.append(Order(product, int(price), qty))
-                net_pos += qty
-                buy_capacity -= qty
+        if not order_depth.sell_orders:
+            return orders
 
-        for ask_price, ask_volume in sorted(order_depth.sell_orders.items()):
-            if buy_capacity <= 0:
-                break
-            add_buy(ask_price, -ask_volume)
+        best_ask = min(order_depth.sell_orders.keys())
+        best_ask_volume = -order_depth.sell_orders[best_ask]
+
+        buy_qty = min(buy_capacity, best_ask_volume)
+        if buy_qty > 0:
+            orders.append(Order(product, best_ask, buy_qty))
 
         return orders
-
