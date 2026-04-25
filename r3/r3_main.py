@@ -10,8 +10,8 @@ class Trader:
     # HYDROGEL_PACK parameters
     # Hydrogel is not clean enough for aggressive fixed-fair market making.
     # Trade only when price is meaningfully away from fair value.
-    HYDROGEL_FAIR = 9990
-    HYDROGEL_EDGE = 31.9*1.25
+    HYDROGEL_FAIR = 9990.8
+    HYDROGEL_EDGE = 31.9
     HYDROGEL_MAX_TAKE_SIZE = 10
     HYDROGEL_FLATTEN_THRESHOLD = 40
     HYDROGEL_FLATTEN_SIZE = 10
