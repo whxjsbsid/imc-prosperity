@@ -8,9 +8,13 @@ class Trader:
     }
 
     # HYDROGEL_PACK parameters
-    HYDROGEL_FAIR = 10000
-    HYDROGEL_PASSIVE_SIZE = 20
+    # Hydrogel is not clean enough for aggressive fixed-fair market making.
+    # Trade only when price is meaningfully away from fair value.
+    HYDROGEL_FAIR = 9990
+    HYDROGEL_EDGE = 30
+    HYDROGEL_MAX_TAKE_SIZE = 10
     HYDROGEL_FLATTEN_THRESHOLD = 50
+    HYDROGEL_FLATTEN_SIZE = 10
 
     def bid(self):
         return 3000
@@ -37,15 +41,19 @@ class Trader:
     ) -> List[Order]:
         """
         HYDROGEL logic:
-        1. Aggressively take asks below fixed fair value.
-        2. Aggressively hit bids above fixed fair value.
-        3. If inventory gets too large, place a flattening order at fair value.
-        4. If both sides exist, post passive quotes one tick inside the spread.
+        1. Use a lower fixed fair value around the historical average.
+        2. Buy only extreme cheap asks below fair - edge.
+        3. Sell only extreme expensive bids above fair + edge.
+        4. Avoid normal passive one-tick market making because Hydrogel is not
+           mean reverting strongly enough for that style.
+        5. If inventory becomes too skewed, place a small flattening order at fair.
         """
         orders: List[Order] = []
 
         limit = self.LIMITS[product]
         fair_value = self.HYDROGEL_FAIR
+        buy_threshold = fair_value - self.HYDROGEL_EDGE
+        sell_threshold = fair_value + self.HYDROGEL_EDGE
         current_position = state.position.get(product, 0)
 
         net_pos = current_position
@@ -70,59 +78,33 @@ class Trader:
                 sell_capacity -= qty
                 buy_capacity += qty
 
-        # Take asks below fair value.
+        # Take only clearly cheap asks.
         for ask_price, ask_volume in sorted(order_depth.sell_orders.items()):
             if buy_capacity <= 0:
                 break
-            if ask_price < fair_value:
-                add_buy(ask_price, -ask_volume)
+            if ask_price < buy_threshold:
+                buy_qty = min(-ask_volume, self.HYDROGEL_MAX_TAKE_SIZE)
+                add_buy(ask_price, buy_qty)
             else:
                 break
 
-        # Take bids above fair value.
+        # Hit only clearly expensive bids.
         for bid_price, bid_volume in sorted(order_depth.buy_orders.items(), reverse=True):
             if sell_capacity <= 0:
                 break
-            if bid_price > fair_value:
-                add_sell(bid_price, bid_volume)
+            if bid_price > sell_threshold:
+                sell_qty = min(bid_volume, self.HYDROGEL_MAX_TAKE_SIZE)
+                add_sell(bid_price, sell_qty)
             else:
                 break
 
-        # Flatten inventory if position becomes too skewed.
+        # Small inventory flattening only when position is very skewed.
+        # This is different from normal passive market making: it only reduces risk.
         if net_pos >= self.HYDROGEL_FLATTEN_THRESHOLD and sell_capacity > 0:
-            flatten_qty = min(net_pos, self.HYDROGEL_PASSIVE_SIZE)
+            flatten_qty = min(net_pos, self.HYDROGEL_FLATTEN_SIZE)
             add_sell(fair_value, flatten_qty)
         elif net_pos <= -self.HYDROGEL_FLATTEN_THRESHOLD and buy_capacity > 0:
-            flatten_qty = min(-net_pos, self.HYDROGEL_PASSIVE_SIZE)
+            flatten_qty = min(-net_pos, self.HYDROGEL_FLATTEN_SIZE)
             add_buy(fair_value, flatten_qty)
-
-        # Post one-tick-inside passive quotes if both sides of the book exist.
-        if order_depth.buy_orders and order_depth.sell_orders:
-            best_bid = max(order_depth.buy_orders.keys())
-            best_ask = min(order_depth.sell_orders.keys())
-
-            improved_bid = best_bid + 1
-            improved_ask = best_ask - 1
-
-            allow_buy_quote = net_pos < self.HYDROGEL_FLATTEN_THRESHOLD
-            allow_sell_quote = net_pos > -self.HYDROGEL_FLATTEN_THRESHOLD
-
-            if allow_buy_quote and buy_capacity > 0:
-                if improved_bid < best_ask and improved_bid < fair_value:
-                    buy_size = self.HYDROGEL_PASSIVE_SIZE
-                    if net_pos > 0:
-                        buy_size = max(0, buy_size - net_pos // 8)
-                    elif net_pos < 0:
-                        buy_size = buy_size + (-net_pos) // 8
-                    add_buy(improved_bid, buy_size)
-
-            if allow_sell_quote and sell_capacity > 0:
-                if improved_ask > best_bid and improved_ask > fair_value:
-                    sell_size = self.HYDROGEL_PASSIVE_SIZE
-                    if net_pos > 0:
-                        sell_size = sell_size + net_pos // 8
-                    elif net_pos < 0:
-                        sell_size = max(0, sell_size - (-net_pos) // 8)
-                    add_sell(improved_ask, sell_size)
 
         return orders
