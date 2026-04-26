@@ -24,9 +24,9 @@ class Trader:
     # Trade only when price is meaningfully away from fair value.
     HYDROGEL_FAIR = 9990.8
     HYDROGEL_EDGE = 31.9 * 0.9
-    HYDROGEL_MAX_TAKE_SIZE = 50
-    HYDROGEL_FLATTEN_THRESHOLD = 150
-    HYDROGEL_FLATTEN_SIZE = 25
+    HYDROGEL_MAX_TAKE_SIZE = 100
+    HYDROGEL_FLATTEN_THRESHOLD = 200
+    HYDROGEL_FLATTEN_SIZE = 50
 
     # Velvetfruit voucher parameters
     VELVETFRUIT = "VELVETFRUIT_EXTRACT"
