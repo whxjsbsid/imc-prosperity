@@ -23,7 +23,7 @@ class Trader:
     # Hydrogel is not clean enough for aggressive fixed-fair market making.
     # Trade only when price is meaningfully away from fair value.
     HYDROGEL_FAIR = 9990.8
-    HYDROGEL_EDGE = 31.9
+    HYDROGEL_EDGE = 31.9*0.9
     HYDROGEL_MAX_TAKE_SIZE = 100
     HYDROGEL_FLATTEN_THRESHOLD = 200
     HYDROGEL_FLATTEN_SIZE = 50
@@ -48,8 +48,8 @@ class Trader:
     # Much stricter voucher entry rules.
     # This avoids trading tiny model gaps that get eaten by spread + hedging cost.
     VOUCHER_MIN_EDGE = 20.0
-    VOUCHER_EDGE_RATIO = 0.15
-    VOUCHER_MAX_TAKE_SIZE = 100
+    VOUCHER_EDGE_RATIO = 0.10
+    VOUCHER_MAX_TAKE_SIZE = 10
 
     # Hedge less often and with smaller clips to reduce Velvetfruit spread cost.
     HEDGE_MIN_QTY = 40
