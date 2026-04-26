@@ -42,15 +42,14 @@ class Trader:
     }
 
     # Round 3 final simulation starts with around 5 days to expiry.
-    # Use a higher sigma so we do not underprice vouchers and sell too easily.
     OPTION_DAYS_TO_EXPIRY = 5.0
-    OPTION_SIGMA = 0.35
+    OPTION_SIGMA = 0.4
 
     # Much stricter voucher entry rules.
     # This avoids trading tiny model gaps that get eaten by spread + hedging cost.
     VOUCHER_MIN_EDGE = 10.0
-    VOUCHER_EDGE_RATIO = 0.04
-    VOUCHER_MAX_TAKE_SIZE = 5
+    VOUCHER_EDGE_RATIO = 0.05
+    VOUCHER_MAX_TAKE_SIZE = 100
 
     # Hedge less often and with smaller clips to reduce Velvetfruit spread cost.
     HEDGE_MIN_QTY = 40
