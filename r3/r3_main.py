@@ -49,7 +49,7 @@ class Trader:
     # IV-smile trading controls.
     # Trade only if the option is cheap/rich versus the fitted smile by both
     # price edge and implied-vol edge.
-    VOUCHER_MIN_PRICE_EDGE = 2.0
+    VOUCHER_MIN_PRICE_EDGE = 4.0
     VOUCHER_PRICE_EDGE_RATIO = 0.001
     VOUCHER_MIN_IV_EDGE = 0.00
     VOUCHER_MAX_TAKE_SIZE = 150
