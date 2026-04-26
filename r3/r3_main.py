@@ -23,7 +23,7 @@ class Trader:
     # Hydrogel is not clean enough for aggressive fixed-fair market making.
     # Trade only when price is meaningfully away from fair value.
     HYDROGEL_FAIR = 9990.8
-    HYDROGEL_EDGE = 31.5*0.9
+    HYDROGEL_EDGE = 31.5*0.8
     HYDROGEL_MAX_TAKE_SIZE = 100
     HYDROGEL_FLATTEN_THRESHOLD = 200
     HYDROGEL_FLATTEN_SIZE = 50
@@ -58,9 +58,9 @@ class Trader:
     # Rare delta hedge controls.
     # Trigger = how much unhedged option delta we tolerate.
     # Clip = max Velvetfruit quantity to trade in one tick if hedge triggers.
-    HEDGE_ENABLED = True
-    HEDGE_TRIGGER_DELTA = 80
-    HEDGE_CLIP_SIZE = 15
+    HEDGE_ENABLED = False
+    HEDGE_TRIGGER_DELTA = 150
+    HEDGE_CLIP_SIZE = 30
 
     def bid(self):
         return 3000
