@@ -49,9 +49,9 @@ class Trader:
     # IV-smile trading controls.
     # Trade only if the option is cheap/rich versus the fitted smile by both
     # price edge and implied-vol edge.
-    VOUCHER_MIN_PRICE_EDGE = 8.0
-    VOUCHER_PRICE_EDGE_RATIO = 0.035
-    VOUCHER_MIN_IV_EDGE = 0.035
+    VOUCHER_MIN_PRICE_EDGE = 3.0
+    VOUCHER_PRICE_EDGE_RATIO = 0.01
+    VOUCHER_MIN_IV_EDGE = 0.01
     VOUCHER_MAX_TAKE_SIZE = 100
     VOUCHER_SOFT_POSITION_LIMIT = 300
 
@@ -164,8 +164,10 @@ class Trader:
         VEV logic:
         1. Use VELVETFRUIT_EXTRACT mid price as the underlying price.
         2. Convert each voucher mid price into implied volatility.
-        3. Fit a simple quadratic volatility smile against log-moneyness.
-        4. Convert fitted smile IV back into fair option prices.
+        3. For each voucher, fit a quadratic IV smile using the OTHER vouchers only.
+           This is leave-one-out fitting, so the option being judged does not pull
+           its own fair value back toward its current market mid.
+        4. Convert leave-one-out fair IV back into a Black-Scholes fair price.
         5. Trade only clear IV/price deviations.
         6. Hedge Velvetfruit delta only rarely, to avoid spread-cost bleeding.
         """
@@ -180,8 +182,10 @@ class Trader:
             return result
 
         time_to_expiry = self.time_to_expiry_years(state)
-        iv_points: List[Tuple[float, float]] = []
-        voucher_mid_prices: Dict[str, float] = {}
+
+        # Store each usable voucher's IV point as:
+        # product -> (log_moneyness, implied_vol)
+        iv_points_by_product: Dict[str, Tuple[float, float]] = {}
 
         for product, strike in self.VOUCHER_STRIKES.items():
             if product not in state.order_depths:
@@ -200,15 +204,11 @@ class Trader:
                 continue
 
             log_moneyness = math.log(strike / spot)
-            iv_points.append((log_moneyness, implied_vol))
-            voucher_mid_prices[product] = mid
+            iv_points_by_product[product] = (log_moneyness, implied_vol)
 
-        # Need at least 3 usable points to fit a quadratic smile.
-        if len(iv_points) < 3:
-            return result
-
-        smile_coeffs = self.fit_quadratic(iv_points)
-        if smile_coeffs is None:
+        # Leave-one-out quadratic needs at least 3 OTHER usable IV points.
+        # Therefore we need at least 4 total points to judge any one voucher.
+        if len(iv_points_by_product) < 4:
             return result
 
         option_delta_from_new_trades = 0.0
@@ -216,6 +216,22 @@ class Trader:
 
         for product, strike in self.VOUCHER_STRIKES.items():
             if product not in state.order_depths:
+                continue
+            if product not in iv_points_by_product:
+                continue
+
+            # Leave-one-out: exclude the current voucher from the smile fit.
+            other_points = [
+                point
+                for other_product, point in iv_points_by_product.items()
+                if other_product != product
+            ]
+
+            if len(other_points) < 3:
+                continue
+
+            smile_coeffs = self.fit_quadratic(other_points)
+            if smile_coeffs is None:
                 continue
 
             x = math.log(strike / spot)
