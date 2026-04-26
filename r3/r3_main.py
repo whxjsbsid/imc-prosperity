@@ -24,9 +24,9 @@ class Trader:
     # Trade only when price is meaningfully away from fair value.
     HYDROGEL_FAIR = 9990.8
     HYDROGEL_EDGE = 31.9 * 0.9
-    HYDROGEL_MAX_TAKE_SIZE = 40
-    HYDROGEL_FLATTEN_THRESHOLD = 120
-    HYDROGEL_FLATTEN_SIZE = 20
+    HYDROGEL_MAX_TAKE_SIZE = 50
+    HYDROGEL_FLATTEN_THRESHOLD = 150
+    HYDROGEL_FLATTEN_SIZE = 25
 
     # Velvetfruit voucher parameters
     VELVETFRUIT = "VELVETFRUIT_EXTRACT"
@@ -43,12 +43,12 @@ class Trader:
 
     # Round 3 final simulation starts with around 5 days to expiry.
     OPTION_DAYS_TO_EXPIRY = 5.0
-    OPTION_SIGMA = 0.5
+    OPTION_SIGMA = 0.4
 
     # Much stricter voucher entry rules.
     # This avoids trading tiny model gaps that get eaten by spread + hedging cost.
     VOUCHER_MIN_EDGE = 10.0
-    VOUCHER_EDGE_RATIO = 0.075
+    VOUCHER_EDGE_RATIO = 0.05
     VOUCHER_MAX_TAKE_SIZE = 100
 
     # Hedge less often and with smaller clips to reduce Velvetfruit spread cost.
