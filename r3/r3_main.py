@@ -48,8 +48,8 @@ class Trader:
     # Much stricter voucher entry rules.
     # This avoids trading tiny model gaps that get eaten by spread + hedging cost.
     VOUCHER_MIN_EDGE = 20.0
-    VOUCHER_EDGE_RATIO = 0.08
-    VOUCHER_MAX_TAKE_SIZE = 50
+    VOUCHER_EDGE_RATIO = 0.15
+    VOUCHER_MAX_TAKE_SIZE = 100
 
     # Hedge less often and with smaller clips to reduce Velvetfruit spread cost.
     HEDGE_MIN_QTY = 40
