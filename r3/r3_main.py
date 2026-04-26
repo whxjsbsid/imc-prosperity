@@ -24,7 +24,7 @@ class Trader:
     # Trade only when price is meaningfully away from fair value.
     HYDROGEL_FAIR = 9990.8
     HYDROGEL_EDGE = 31.5*0.9
-    HYDROGEL_MAX_TAKE_SIZE = 100
+    HYDROGEL_MAX_TAKE_SIZE = 0
     HYDROGEL_FLATTEN_THRESHOLD = 200
     HYDROGEL_FLATTEN_SIZE = 50
 
