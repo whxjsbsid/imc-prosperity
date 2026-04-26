@@ -50,10 +50,10 @@ class Trader:
     # Trade only if the option is cheap/rich versus the fitted smile by both
     # price edge and implied-vol edge.
     VOUCHER_MIN_PRICE_EDGE = 8.0
-    VOUCHER_PRICE_EDGE_RATIO = 0.04
+    VOUCHER_PRICE_EDGE_RATIO = 0.035
     VOUCHER_MIN_IV_EDGE = 0.035
-    VOUCHER_MAX_TAKE_SIZE = 50
-    VOUCHER_SOFT_POSITION_LIMIT = 200
+    VOUCHER_MAX_TAKE_SIZE = 100
+    VOUCHER_SOFT_POSITION_LIMIT = 300
 
     # Rare delta hedge controls.
     # Trigger = how much unhedged option delta we tolerate.
