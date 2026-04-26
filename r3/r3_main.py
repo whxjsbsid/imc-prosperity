@@ -49,11 +49,11 @@ class Trader:
     # This avoids trading tiny model gaps that get eaten by spread + hedging cost.
     VOUCHER_MIN_EDGE = 10.0
     VOUCHER_EDGE_RATIO = 0.05
-    VOUCHER_MAX_TAKE_SIZE = 100
+    VOUCHER_MAX_TAKE_SIZE = 0
 
     # Hedge less often and with smaller clips to reduce Velvetfruit spread cost.
     HEDGE_MIN_QTY = 40
-    HEDGE_MAX_SIZE = 20
+    HEDGE_MAX_SIZE = 0
 
     def bid(self):
         return 3000
