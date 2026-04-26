@@ -20,7 +20,7 @@ class Trader:
     # VELVETFRUIT_EXTRACT parameters
     # Same style as Hydrogel: fixed fair value + extreme-only taking.
     VELVETFRUIT_FAIR = 5250.1
-    VELVETFRUIT_EDGE = 15.63 *1.25
+    VELVETFRUIT_EDGE = 15.63 * 1.4
     VELVETFRUIT_MAX_TAKE_SIZE = 100
     VELVETFRUIT_FLATTEN_THRESHOLD = 200
     VELVETFRUIT_FLATTEN_SIZE = 50
