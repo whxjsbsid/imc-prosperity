@@ -49,7 +49,7 @@ class Trader:
     # IV-smile trading controls.
     # Trade only if the option is cheap/rich versus the fitted smile by both
     # price edge and implied-vol edge.
-    VOUCHER_MIN_PRICE_EDGE = 1.0
+    VOUCHER_MIN_PRICE_EDGE = 3.0
     VOUCHER_PRICE_EDGE_RATIO = 0.01
     VOUCHER_MIN_IV_EDGE = 0.01
     VOUCHER_MAX_TAKE_SIZE = 150
@@ -59,8 +59,8 @@ class Trader:
     # Trigger = how much unhedged option delta we tolerate.
     # Clip = max Velvetfruit quantity to trade in one tick if hedge triggers.
     HEDGE_ENABLED = True
-    HEDGE_TRIGGER_DELTA = 160
-    HEDGE_CLIP_SIZE = 30
+    HEDGE_TRIGGER_DELTA = 80
+    HEDGE_CLIP_SIZE = 15
 
     def bid(self):
         return 3000
