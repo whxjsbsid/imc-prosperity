@@ -58,7 +58,7 @@ class Trader:
     # Rare delta hedge controls.
     # Trigger = how much unhedged option delta we tolerate.
     # Clip = max Velvetfruit quantity to trade in one tick if hedge triggers.
-    HEDGE_ENABLED = False
+    HEDGE_ENABLED = True
     HEDGE_TRIGGER_DELTA = 150
     HEDGE_CLIP_SIZE = 30
 
