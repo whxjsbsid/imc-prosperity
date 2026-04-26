@@ -23,7 +23,7 @@ class Trader:
     # Hydrogel is not clean enough for aggressive fixed-fair market making.
     # Trade only when price is meaningfully away from fair value.
     HYDROGEL_FAIR = 9990.8
-    HYDROGEL_EDGE = 31.9 * 0.9
+    HYDROGEL_EDGE = 31.9
     HYDROGEL_MAX_TAKE_SIZE = 100
     HYDROGEL_FLATTEN_THRESHOLD = 200
     HYDROGEL_FLATTEN_SIZE = 50
@@ -43,17 +43,17 @@ class Trader:
 
     # Round 3 final simulation starts with around 5 days to expiry.
     OPTION_DAYS_TO_EXPIRY = 5.0
-    OPTION_SIGMA = 0.5
+    OPTION_SIGMA = 0.4
 
     # Much stricter voucher entry rules.
     # This avoids trading tiny model gaps that get eaten by spread + hedging cost.
-    VOUCHER_MIN_EDGE = 10.0
-    VOUCHER_EDGE_RATIO = 0.05
-    VOUCHER_MAX_TAKE_SIZE = 0
+    VOUCHER_MIN_EDGE = 20.0
+    VOUCHER_EDGE_RATIO = 0.08
+    VOUCHER_MAX_TAKE_SIZE = 50
 
     # Hedge less often and with smaller clips to reduce Velvetfruit spread cost.
     HEDGE_MIN_QTY = 40
-    HEDGE_MAX_SIZE = 0
+    HEDGE_MAX_SIZE = 20
 
     def bid(self):
         return 3000
