@@ -43,7 +43,7 @@ class Trader:
 
     # Round 3 final simulation starts with around 5 days to expiry.
     OPTION_DAYS_TO_EXPIRY = 5.0
-    OPTION_SIGMA = 0.35
+    OPTION_SIGMA = 0.4
 
     # Much stricter voucher entry rules.
     # This avoids trading tiny model gaps that get eaten by spread + hedging cost.
