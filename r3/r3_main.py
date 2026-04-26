@@ -14,16 +14,12 @@ class Trader:
     HYDROGEL_FAIR = 9990.8
     HYDROGEL_EDGE = 31.94 * 0.9
     HYDROGEL_MAX_TAKE_SIZE = 100
-    HYDROGEL_FLATTEN_THRESHOLD = 200
-    HYDROGEL_FLATTEN_SIZE = 50
 
     # VELVETFRUIT_EXTRACT parameters
     # Same style as Hydrogel: fixed fair value + extreme-only taking.
     VELVETFRUIT_FAIR = 5250.1
     VELVETFRUIT_EDGE = 15.63 * 1.4
     VELVETFRUIT_MAX_TAKE_SIZE = 100
-    VELVETFRUIT_FLATTEN_THRESHOLD = 200
-    VELVETFRUIT_FLATTEN_SIZE = 50
 
     def bid(self):
         return 3000
@@ -62,7 +58,6 @@ class Trader:
         3. Sell only extreme expensive bids above fair + edge.
         4. Avoid normal passive one-tick market making because Hydrogel is not
            mean reverting strongly enough for that style.
-        5. If inventory becomes too skewed, place a small flattening order at fair.
         """
         return self.trade_extreme_mean_reversion(
             state=state,
@@ -71,8 +66,6 @@ class Trader:
             fair_value=self.HYDROGEL_FAIR,
             edge=self.HYDROGEL_EDGE,
             max_take_size=self.HYDROGEL_MAX_TAKE_SIZE,
-            flatten_threshold=self.HYDROGEL_FLATTEN_THRESHOLD,
-            flatten_size=self.HYDROGEL_FLATTEN_SIZE,
         )
 
     def trade_velvetfruit(
@@ -87,7 +80,6 @@ class Trader:
         2. Buy only cheap asks below fair - edge.
         3. Sell only expensive bids above fair + edge.
         4. No vouchers, no option hedging, no passive market making.
-        5. If inventory becomes too skewed, place a small flattening order at fair.
         """
         return self.trade_extreme_mean_reversion(
             state=state,
@@ -96,8 +88,6 @@ class Trader:
             fair_value=self.VELVETFRUIT_FAIR,
             edge=self.VELVETFRUIT_EDGE,
             max_take_size=self.VELVETFRUIT_MAX_TAKE_SIZE,
-            flatten_threshold=self.VELVETFRUIT_FLATTEN_THRESHOLD,
-            flatten_size=self.VELVETFRUIT_FLATTEN_SIZE,
         )
 
     def trade_extreme_mean_reversion(
@@ -108,8 +98,6 @@ class Trader:
         fair_value: float,
         edge: float,
         max_take_size: int,
-        flatten_threshold: int,
-        flatten_size: int,
     ) -> List[Order]:
         """
         Shared extreme-only mean reversion logic.
@@ -165,14 +153,5 @@ class Trader:
                 add_sell(bid_price, sell_qty)
             else:
                 break
-
-        # Small inventory flattening only when position is very skewed.
-        # This is not normal passive market making. It only reduces risk.
-        if net_pos >= flatten_threshold and sell_capacity > 0:
-            flatten_qty = min(net_pos, flatten_size)
-            add_sell(round(fair_value), flatten_qty)
-        elif net_pos <= -flatten_threshold and buy_capacity > 0:
-            flatten_qty = min(-net_pos, flatten_size)
-            add_buy(round(fair_value), flatten_qty)
 
         return orders
