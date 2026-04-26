@@ -30,33 +30,31 @@ class Trader:
 
     # Velvetfruit voucher parameters
     VELVETFRUIT = "VELVETFRUIT_EXTRACT"
+    # Safer setup: only trade the near-the-money vouchers.
+    # Deep ITM vouchers mostly behave like Velvetfruit itself, while far OTM
+    # vouchers are too noisy for this simple model.
     VOUCHER_STRIKES = {
-        "VEV_4000": 4000,
-        "VEV_4500": 4500,
         "VEV_5000": 5000,
         "VEV_5100": 5100,
         "VEV_5200": 5200,
         "VEV_5300": 5300,
         "VEV_5400": 5400,
-        "VEV_5500": 5500,
-        "VEV_6000": 6000,
-        "VEV_6500": 6500,
     }
 
-    # Public data looks like:
-    # day_0 -> around 7 days left, day_1 -> 6, day_2 -> 5.
-    # If the hidden/live round is the next day, use 4.0.
-    OPTION_DAYS_TO_EXPIRY = 4.0
-    OPTION_SIGMA = 0.25
+    # Round 3 final simulation starts with around 5 days to expiry.
+    # Use a higher sigma so we do not underprice vouchers and sell too easily.
+    OPTION_DAYS_TO_EXPIRY = 5.0
+    OPTION_SIGMA = 0.35
 
-    # Only trade vouchers when the gap is bigger than normal book noise.
-    VOUCHER_MIN_EDGE = 2.0
-    VOUCHER_EDGE_RATIO = 0.015
-    VOUCHER_MAX_TAKE_SIZE = 25
+    # Much stricter voucher entry rules.
+    # This avoids trading tiny model gaps that get eaten by spread + hedging cost.
+    VOUCHER_MIN_EDGE = 10.0
+    VOUCHER_EDGE_RATIO = 0.04
+    VOUCHER_MAX_TAKE_SIZE = 5
 
-    # Hedging controls. We hedge option delta with VELVETFRUIT_EXTRACT.
-    HEDGE_MIN_QTY = 8
-    HEDGE_MAX_SIZE = 80
+    # Hedge less often and with smaller clips to reduce Velvetfruit spread cost.
+    HEDGE_MIN_QTY = 40
+    HEDGE_MAX_SIZE = 20
 
     def bid(self):
         return 3000
@@ -225,10 +223,6 @@ class Trader:
         fair_value = self.option_fair_value(underlying_mid, strike)
         delta = self.option_delta(underlying_mid, strike)
         edge = max(self.VOUCHER_MIN_EDGE, fair_value * self.VOUCHER_EDGE_RATIO)
-
-        # Far OTM vouchers are usually only noise unless the market is wildly wrong.
-        if strike >= 6000:
-            edge = max(edge, 5.0)
 
         current_position = state.position.get(product, 0)
         net_pos = current_position
