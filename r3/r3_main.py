@@ -23,7 +23,7 @@ class Trader:
     # Hydrogel is not clean enough for aggressive fixed-fair market making.
     # Trade only when price is meaningfully away from fair value.
     HYDROGEL_FAIR = 9990.8
-    HYDROGEL_EDGE = 31.5*0.8
+    HYDROGEL_EDGE = 31.5*0.9
     HYDROGEL_MAX_TAKE_SIZE = 100
     HYDROGEL_FLATTEN_THRESHOLD = 200
     HYDROGEL_FLATTEN_SIZE = 50
@@ -50,7 +50,7 @@ class Trader:
     # Trade only if the option is cheap/rich versus the fitted smile by both
     # price edge and implied-vol edge.
     VOUCHER_MIN_PRICE_EDGE = 3.0
-    VOUCHER_PRICE_EDGE_RATIO = 0.005
+    VOUCHER_PRICE_EDGE_RATIO = 0.001
     VOUCHER_MIN_IV_EDGE = 0.00
     VOUCHER_MAX_TAKE_SIZE = 150
     VOUCHER_SOFT_POSITION_LIMIT = 300
