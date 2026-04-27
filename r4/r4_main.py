@@ -35,8 +35,8 @@ class Trader:
 
     # If Mark 67 was recently buying, avoid selling too easily against him.
     # This does not ban sells; it just requires a more expensive bid before we sell.
-    MARK67_SELL_BLOCK_SIGNAL = 5.0
-    MARK67_SELL_BLOCK_EXTRA_EDGE = 5.0
+    MARK67_SELL_BLOCK_SIGNAL = 7.0
+    MARK67_SELL_BLOCK_EXTRA_EDGE = 7.0
 
     # Small optional follow trade when Mark 67's signal is fresh and the ask is
     # still close to fair. This is intentionally small because the signal is lagged.
