@@ -29,20 +29,20 @@ class Trader:
     # Keep this signal short-lived because we only see market_trades after they
     # happened. It should bias us, not completely override the main strategy.
     MARK67_DECAY = 0.70
-    MARK67_SIGNAL_CAP = 100.0
-    MARK67_SIGNAL_TO_FAIR_BIAS = 0.2
-    MARK67_MAX_FAIR_BIAS = 10
+    MARK67_SIGNAL_CAP = 40.0
+    MARK67_SIGNAL_TO_FAIR_BIAS = 0.20
+    MARK67_MAX_FAIR_BIAS = 4.0
 
     # If Mark 67 was recently buying, avoid selling too easily against him.
     # This does not ban sells; it just requires a more expensive bid before we sell.
-    MARK67_SELL_BLOCK_SIGNAL = 3.0
-    MARK67_SELL_BLOCK_EXTRA_EDGE = 5.0
+    MARK67_SELL_BLOCK_SIGNAL = 5.0
+    MARK67_SELL_BLOCK_EXTRA_EDGE = 6.0
 
     # Small optional follow trade when Mark 67's signal is fresh and the ask is
     # still close to fair. This is intentionally small because the signal is lagged.
-    MARK67_EXTRA_BUY_SIGNAL = 3.0
+    MARK67_EXTRA_BUY_SIGNAL = 8.0
     MARK67_EXTRA_BUY_SIZE = 50
-    MARK67_MAX_CHASE_ABOVE_FAIR = 5.0
+    MARK67_MAX_CHASE_ABOVE_FAIR = 3.0
 
     def bid(self):
         return 3000
