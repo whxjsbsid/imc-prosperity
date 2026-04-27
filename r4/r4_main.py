@@ -40,7 +40,7 @@ class Trader:
 
     # Small optional follow trade when Mark 67's signal is fresh and the ask is
     # still close to fair. This is intentionally small because the signal is lagged.
-    MARK67_EXTRA_BUY_SIGNAL = 8.0
+    MARK67_EXTRA_BUY_SIGNAL = 5.0
     MARK67_EXTRA_BUY_SIZE = 50
     MARK67_MAX_CHASE_ABOVE_FAIR = 3.0
 
