@@ -138,6 +138,10 @@ class Trader:
             "threshold": 50.0,
             "max_take_size": 10, 
         },
+        "OXYGEN_SHAKE_MINT": {
+            "threshold": 38.0,
+            "max_take_size": 10,
+        },
     }
 
     def bid(self):
