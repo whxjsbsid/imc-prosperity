@@ -72,6 +72,24 @@ class Trader:
         },
     ]
 
+    # Pebbles basket strategy.
+    # Historical data suggests the 5 Pebbles mids sum to roughly a stable basket.
+    # Direct basket trades are rare because spread is wide, so this is extreme-only
+    # and small-size by default.
+    PEBBLE_BASKET_PRODUCTS = [
+        "PEBBLES_XS",
+        "PEBBLES_S",
+        "PEBBLES_M",
+        "PEBBLES_L",
+        "PEBBLES_XL",
+    ]
+    PEBBLE_BASKET_KEY = "pebbles_5_sum"
+    PEBBLE_BASKET_ALPHA = 0.01
+    PEBBLE_BASKET_OPEN_EDGE = 2.0
+    PEBBLE_BASKET_CLOSE_EDGE = 2.0
+    PEBBLE_BASKET_MAX_TAKE_SIZE = 10
+    PEBBLE_BASKET_ALLOW_SHORT = True
+
     # One-tick jump reversal strategies.
     # If mid jumps up by threshold, sell the best bid.
     # If mid drops by threshold, buy the best ask.
@@ -133,6 +151,8 @@ class Trader:
         data = self.decode_trader_data(state.traderData)
         if "pair_means" not in data or not isinstance(data.get("pair_means"), dict):
             data["pair_means"] = {}
+        if "basket_means" not in data or not isinstance(data.get("basket_means"), dict):
+            data["basket_means"] = {}
         if "prev_mids" not in data or not isinstance(data.get("prev_mids"), dict):
             data["prev_mids"] = {}
 
@@ -155,6 +175,13 @@ class Trader:
                 edge=float(config["edge"]),
                 max_take_size=int(config["max_take_size"]),
             )
+
+        self.trade_pebble_basket(
+            state=state,
+            result=result,
+            planned_position=planned_position,
+            data=data,
+        )
 
         for product, config in self.ONE_TICK_REVERSION_CONFIGS.items():
             self.trade_one_tick_reversion(
@@ -254,6 +281,143 @@ class Trader:
         )
 
         pair_means[key] = (1.0 - alpha) * pair_mean + alpha * current_sum
+
+    def trade_pebble_basket(
+        self,
+        state: TradingState,
+        result: Dict[str, List[Order]],
+        planned_position: Dict[str, int],
+        data: Dict[str, Any],
+    ) -> None:
+        """
+        Extreme-only 5-leg Pebbles basket.
+
+        Basket idea:
+        PEBBLES_XS + PEBBLES_S + PEBBLES_M + PEBBLES_L + PEBBLES_XL
+        tends to stay close to a stable rolling sum.
+
+        Execution idea:
+        - If the sum of best asks is far below rolling basket fair, buy 1 basket.
+        - If we already hold a long basket and the sum of best bids recovers,
+          sell 1 basket to flatten.
+        - Optional short basket is disabled by default because historical direct
+          bid-side opportunities were much rarer.
+        """
+        products = self.PEBBLE_BASKET_PRODUCTS
+        if any(product not in state.order_depths for product in products):
+            return
+
+        mids: Dict[str, float] = {}
+        best_asks: Dict[str, int] = {}
+        best_ask_volumes: Dict[str, int] = {}
+        best_bids: Dict[str, int] = {}
+        best_bid_volumes: Dict[str, int] = {}
+
+        for product in products:
+            order_depth = state.order_depths[product]
+            mid = self.get_mid_price(order_depth)
+            if mid is None or len(order_depth.sell_orders) == 0 or len(order_depth.buy_orders) == 0:
+                return
+
+            best_ask, best_ask_volume = min(order_depth.sell_orders.items())
+            best_bid, best_bid_volume = max(order_depth.buy_orders.items())
+
+            mids[product] = mid
+            best_asks[product] = int(best_ask)
+            best_ask_volumes[product] = abs(int(best_ask_volume))
+            best_bids[product] = int(best_bid)
+            best_bid_volumes[product] = abs(int(best_bid_volume))
+
+        basket_means = data["basket_means"]
+        current_mid_sum = sum(mids.values())
+
+        old_mean_raw = basket_means.get(self.PEBBLE_BASKET_KEY)
+        if old_mean_raw is None:
+            basket_means[self.PEBBLE_BASKET_KEY] = current_mid_sum
+            return
+
+        basket_mean = self.safe_float(old_mean_raw, current_mid_sum)
+        ask_sum = sum(best_asks.values())
+        bid_sum = sum(best_bids.values())
+
+        long_basket_units = min(max(0, planned_position.get(product, 0)) for product in products)
+        short_basket_units = min(max(0, -planned_position.get(product, 0)) for product in products)
+
+        # 1) If an existing long basket can be sold near fair, flatten first.
+        if long_basket_units > 0 and bid_sum >= basket_mean - self.PEBBLE_BASKET_CLOSE_EDGE:
+            qty = self.get_equal_basket_sell_quantity(
+                products=products,
+                planned_position=planned_position,
+                visible_volumes=best_bid_volumes,
+                max_take_size=min(self.PEBBLE_BASKET_MAX_TAKE_SIZE, long_basket_units),
+            )
+            if qty > 0:
+                for product in products:
+                    self.add_sell_order(
+                        result=result,
+                        planned_position=planned_position,
+                        product=product,
+                        price=best_bids[product],
+                        quantity=qty,
+                    )
+
+        # 2) If the whole basket is offered cheaply, buy all 5 legs equally.
+        elif ask_sum <= basket_mean - self.PEBBLE_BASKET_OPEN_EDGE:
+            qty = self.get_equal_basket_buy_quantity(
+                products=products,
+                planned_position=planned_position,
+                visible_volumes=best_ask_volumes,
+                max_take_size=self.PEBBLE_BASKET_MAX_TAKE_SIZE,
+            )
+            if qty > 0:
+                for product in products:
+                    self.add_buy_order(
+                        result=result,
+                        planned_position=planned_position,
+                        product=product,
+                        price=best_asks[product],
+                        quantity=qty,
+                    )
+
+        # 3) Optional short basket. Disabled by default.
+        elif self.PEBBLE_BASKET_ALLOW_SHORT and bid_sum >= basket_mean + self.PEBBLE_BASKET_OPEN_EDGE:
+            qty = self.get_equal_basket_sell_quantity(
+                products=products,
+                planned_position=planned_position,
+                visible_volumes=best_bid_volumes,
+                max_take_size=self.PEBBLE_BASKET_MAX_TAKE_SIZE,
+            )
+            if qty > 0:
+                for product in products:
+                    self.add_sell_order(
+                        result=result,
+                        planned_position=planned_position,
+                        product=product,
+                        price=best_bids[product],
+                        quantity=qty,
+                    )
+
+        elif short_basket_units > 0 and ask_sum <= basket_mean + self.PEBBLE_BASKET_CLOSE_EDGE:
+            qty = self.get_equal_basket_buy_quantity(
+                products=products,
+                planned_position=planned_position,
+                visible_volumes=best_ask_volumes,
+                max_take_size=min(self.PEBBLE_BASKET_MAX_TAKE_SIZE, short_basket_units),
+            )
+            if qty > 0:
+                for product in products:
+                    self.add_buy_order(
+                        result=result,
+                        planned_position=planned_position,
+                        product=product,
+                        price=best_asks[product],
+                        quantity=qty,
+                    )
+
+        basket_means[self.PEBBLE_BASKET_KEY] = (
+            (1.0 - self.PEBBLE_BASKET_ALPHA) * basket_mean
+            + self.PEBBLE_BASKET_ALPHA * current_mid_sum
+        )
 
     def trade_one_tick_reversion(
         self,
@@ -432,6 +596,34 @@ class Trader:
             result[product] = []
         result[product].append(Order(product, int(price), -quantity))
         planned_position[product] = current_planned - quantity
+
+    def get_equal_basket_buy_quantity(
+        self,
+        products: List[str],
+        planned_position: Dict[str, int],
+        visible_volumes: Dict[str, int],
+        max_take_size: int,
+    ) -> int:
+        qty = int(max_take_size)
+        for product in products:
+            limit = self.LIMITS.get(product, self.DEFAULT_LIMIT)
+            buy_capacity = limit - planned_position.get(product, 0)
+            qty = min(qty, int(visible_volumes.get(product, 0)), int(buy_capacity))
+        return int(max(0, qty))
+
+    def get_equal_basket_sell_quantity(
+        self,
+        products: List[str],
+        planned_position: Dict[str, int],
+        visible_volumes: Dict[str, int],
+        max_take_size: int,
+    ) -> int:
+        qty = int(max_take_size)
+        for product in products:
+            limit = self.LIMITS.get(product, self.DEFAULT_LIMIT)
+            sell_capacity = limit + planned_position.get(product, 0)
+            qty = min(qty, int(visible_volumes.get(product, 0)), int(sell_capacity))
+        return int(max(0, qty))
 
     # ------------------------------------------------------------------
     # Market data helpers
