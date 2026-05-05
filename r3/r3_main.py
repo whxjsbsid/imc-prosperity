@@ -8,15 +8,13 @@ class Trader:
         "VELVETFRUIT_EXTRACT": 200,
     }
 
-    # HYDROGEL_PACK parameters
-    # Hydrogel is not clean enough for aggressive fixed-fair market making.
-    # Trade only when price is meaningfully away from fair value.
+    # Hydrogel is not clean enough for aggressive fixed-fair market making
+    # Trade only when price is meaningfully away from fair value
     HYDROGEL_FAIR = 9990.8
     HYDROGEL_EDGE = 31.94 * 0.9
     HYDROGEL_MAX_TAKE_SIZE = 100
 
-    # VELVETFRUIT_EXTRACT parameters
-    # Same style as Hydrogel: fixed fair value + extreme-only taking.
+    # Same style as Hydrogel: fixed fair value + extreme-only taking
     VELVETFRUIT_FAIR = 5250.1
     VELVETFRUIT_EDGE = 15.63 * 1.4
     VELVETFRUIT_MAX_TAKE_SIZE = 100
@@ -45,20 +43,18 @@ class Trader:
         traderData = ""
         return result, conversions, traderData
 
+        # HYDROGEL logic:
+        # 1. Use a lower fixed fair value around the historical average
+        # 2. Buy only extreme cheap asks below fair - edge
+        # 3. Sell only extreme expensive bids above fair + edge
+
     def trade_hydrogel(
         self,
         state: TradingState,
         product: str,
         order_depth: OrderDepth,
     ) -> List[Order]:
-        """
-        HYDROGEL logic:
-        1. Use a lower fixed fair value around the historical average.
-        2. Buy only extreme cheap asks below fair - edge.
-        3. Sell only extreme expensive bids above fair + edge.
-        4. Avoid normal passive one-tick market making because Hydrogel is not
-           mean reverting strongly enough for that style.
-        """
+
         return self.trade_extreme_mean_reversion(
             state=state,
             product=product,
@@ -68,19 +64,19 @@ class Trader:
             max_take_size=self.HYDROGEL_MAX_TAKE_SIZE,
         )
 
+        
+    # VELVETFRUIT logic:
+    # 1. Use a fixed fair value around the historical average.
+    # 2. Buy only cheap asks below fair - edge.
+    # 3. Sell only expensive bids above fair + edge.
+    # 4. No vouchers, no option hedging, no passive market making.
     def trade_velvetfruit(
         self,
         state: TradingState,
         product: str,
         order_depth: OrderDepth,
     ) -> List[Order]:
-        """
-        VELVETFRUIT logic:
-        1. Use a fixed fair value around the historical average.
-        2. Buy only cheap asks below fair - edge.
-        3. Sell only expensive bids above fair + edge.
-        4. No vouchers, no option hedging, no passive market making.
-        """
+
         return self.trade_extreme_mean_reversion(
             state=state,
             product=product,
@@ -90,6 +86,7 @@ class Trader:
             max_take_size=self.VELVETFRUIT_MAX_TAKE_SIZE,
         )
 
+    # Shared extreme-only mean reversion logic
     def trade_extreme_mean_reversion(
         self,
         state: TradingState,
@@ -99,12 +96,7 @@ class Trader:
         edge: float,
         max_take_size: int,
     ) -> List[Order]:
-        """
-        Shared extreme-only mean reversion logic.
 
-        It takes liquidity only when the price is clearly away from fair value.
-        It does not post normal passive quotes inside the spread.
-        """
         orders: List[Order] = []
 
         limit = self.LIMITS[product]
@@ -134,7 +126,6 @@ class Trader:
                 sell_capacity -= qty
                 buy_capacity += qty
 
-        # Take only clearly cheap asks.
         for ask_price, ask_volume in sorted(order_depth.sell_orders.items()):
             if buy_capacity <= 0:
                 break
@@ -144,7 +135,6 @@ class Trader:
             else:
                 break
 
-        # Hit only clearly expensive bids.
         for bid_price, bid_volume in sorted(order_depth.buy_orders.items(), reverse=True):
             if sell_capacity <= 0:
                 break
