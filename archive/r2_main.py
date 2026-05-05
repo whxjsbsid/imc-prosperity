@@ -8,7 +8,6 @@ class Trader:
         "INTARIAN_PEPPER_ROOT": 80,
     }
 
-    # ASH_COATED_OSMIUM parameters
     OSMIUM_FAIR = 10000
     OSMIUM_PASSIVE_SIZE = 20
     OSMIUM_FLATTEN_THRESHOLD = 50
@@ -32,18 +31,17 @@ class Trader:
         traderData = ""
         return result, conversions, traderData
 
+    # OSMIUM logic:
+    # 1. Aggressively take quotes better than fixed fair value
+    # 2. If inventory gets too large, place a flattening order at fair value
+    # 3. If both sides exist, post passive quotes one tick inside the spread
     def trade_osmium(
         self,
         state: TradingState,
         product: str,
         order_depth: OrderDepth,
     ) -> List[Order]:
-        """
-        OSMIUM logic:
-        1. Aggressively take quotes better than fixed fair value.
-        2. If inventory gets too large, place a flattening order at fair value.
-        3. If both sides exist, post passive quotes one tick inside the spread.
-        """
+        
         orders: List[Order] = []
 
         limit = self.LIMITS[product]
@@ -72,7 +70,6 @@ class Trader:
                 sell_capacity -= qty
                 buy_capacity += qty
 
-        # Take asks below fair value.
         for ask_price, ask_volume in sorted(order_depth.sell_orders.items()):
             if buy_capacity <= 0:
                 break
@@ -81,7 +78,6 @@ class Trader:
             else:
                 break
 
-        # Take bids above fair value.
         for bid_price, bid_volume in sorted(order_depth.buy_orders.items(), reverse=True):
             if sell_capacity <= 0:
                 break
@@ -90,7 +86,6 @@ class Trader:
             else:
                 break
 
-        # Flatten inventory if position becomes too skewed.
         if net_pos >= self.OSMIUM_FLATTEN_THRESHOLD and sell_capacity > 0:
             flatten_qty = min(net_pos, self.OSMIUM_PASSIVE_SIZE)
             add_sell(fair_value, flatten_qty)
@@ -98,7 +93,6 @@ class Trader:
             flatten_qty = min(-net_pos, self.OSMIUM_PASSIVE_SIZE)
             add_buy(fair_value, flatten_qty)
 
-        # Post one-tick-inside passive quotes if both sides of the book exist.
         if order_depth.buy_orders and order_depth.sell_orders:
             best_bid = max(order_depth.buy_orders.keys())
             best_ask = min(order_depth.sell_orders.keys())
@@ -129,17 +123,16 @@ class Trader:
 
         return orders
 
+    # ROOT logic:
+    # Buy only the current best ask each tick, capped by the remaining
+    # position capacity up to the 80-unit limit.
     def trade_root(
         self,
         state: TradingState,
         product: str,
         order_depth: OrderDepth,
     ) -> List[Order]:
-        """
-        ROOT logic:
-        Buy only the current best ask each tick, capped by the remaining
-        position capacity up to the 80-unit limit.
-        """
+
         orders: List[Order] = []
 
         limit = self.LIMITS[product]
