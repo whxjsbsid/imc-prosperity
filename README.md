@@ -1,6 +1,6 @@
 # IMC Prosperity 4 Trading Challenge
 
-Algorithmic trading system to compete in IMC's simulated exchange.
+Algorithmic trading system developed to compete in IMC's simulated exchange.
 
 ## Strategies Implemented
 - **Mean reversion**: Trade around predetermined fair value
