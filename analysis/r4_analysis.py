@@ -7,24 +7,14 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-
-# Change this if your zip has a different name.
 DEFAULT_ZIP_PATH = "ROUND_4.zip"
 
-# Use short and medium horizons.
-# In Prosperity data, timestamps usually move in 100-step increments.
 DEFAULT_HORIZONS = [100, 500, 1000, 2000, 5000]
 
-# A trader needs enough observations before we treat the result as meaningful.
 MIN_TRADES_FOR_FLAG = 50
 
 
-# ============================================================
-# Loading
-# ============================================================
-
 def extract_day_from_file(file_name):
-    """Extract day number from names like prices_round_4_day_1.csv."""
     match = re.search(r"day_(-?\d+)", file_name)
     if match:
         return int(match.group(1))
@@ -32,7 +22,6 @@ def extract_day_from_file(file_name):
 
 
 def load_round_zip(zip_path):
-    """Load all prices_*.csv and trades_*.csv files from a Prosperity round zip."""
     all_prices = []
     all_trades = []
 
@@ -68,7 +57,6 @@ def load_round_zip(zip_path):
 
 
 def clean_prices_and_trades(prices, trades):
-    """Convert key columns to numeric and remove unusable price rows."""
     price_numeric_cols = [
         "day",
         "timestamp",
@@ -89,8 +77,8 @@ def clean_prices_and_trades(prices, trades):
     prices["product"] = prices["product"].astype(str)
     trades["symbol"] = trades["symbol"].astype(str)
 
-    # For VEV options, bid_price_1 can be 0 when the option is almost worthless.
-    # So do NOT filter out bid_price_1 == 0. Only require a valid positive mid.
+    # For VEV options, bid_price_1 can be 0 when the option is almost worthless
+    # So dont filter out bid_price_1 == 0, only require a valid positive mid
     invalid_price_mask = (
         prices["day"].isna()
         | prices["timestamp"].isna()
@@ -124,17 +112,12 @@ def clean_prices_and_trades(prices, trades):
 
     return prices_clean, trades_clean
 
-
-# ============================================================
-# Price alignment
-# ============================================================
-
+'''
+For each trade, attach:
+- mid_at_trade: latest available mid at or before trade timestamp
+- mid_fwd_H: first mid at or after timestamp + H
+'''
 def attach_current_and_future_mids(trades, prices, horizons):
-    """
-    For each trade, attach:
-    - mid_at_trade: latest available mid at or before trade timestamp
-    - mid_fwd_H: first mid at or after timestamp + H
-    """
     price_small = (
         prices[["day", "timestamp", "product", "mid_price"]]
         .rename(columns={"product": "symbol"})
@@ -186,15 +169,13 @@ def attach_current_and_future_mids(trades, prices, horizons):
     enriched = pd.concat(out, ignore_index=True)
     return enriched
 
-
+'''
+Convert each trade into two trader-action rows:
+- buyer gets +quantity
+- seller gets -quantity
+This lets us score each trader's side independently
+'''
 def explode_trades_to_trader_actions(enriched_trades):
-    """
-    Convert each trade into two trader-action rows:
-    - buyer gets +quantity
-    - seller gets -quantity
-
-    This lets us score each trader's side independently.
-    """
     buyer_actions = enriched_trades.copy()
     buyer_actions["trader"] = buyer_actions["buyer"]
     buyer_actions["side"] = "BUY"
@@ -213,27 +194,18 @@ def explode_trades_to_trader_actions(enriched_trades):
 
     return actions
 
-
-# ============================================================
-# Scoring
-# ============================================================
-
-def score_actions(actions, horizons):
-    """
-    Main idea:
-
+'''  
+Main idea:
     1) execution_edge:
-       BUY is good if future_mid > trade_price.
-       SELL is good if future_mid < trade_price.
-       This captures profitable fills, but it can over-reward market makers.
-
+       BUY is good if future_mid > trade_price
+       SELL is good if future_mid < trade_price
+       This captures profitable fills, but it can over-reward market makers
     2) directional_edge:
-       BUY is good if future_mid > mid_at_trade.
-       SELL is good if future_mid < mid_at_trade.
-       This is more useful for finding a potential informed / insider-style trader,
-       because it ignores the bid-ask execution advantage and asks:
-       "Did the trader choose the right direction before the mid moved?"
-    """
+       BUY is good if future_mid > mid_at_trade
+       SELL is good if future_mid < mid_at_trade
+       This is more useful for finding a potential informed trader
+'''
+def score_actions(actions, horizons):
     scored = actions.copy()
 
     for h in horizons:
@@ -280,12 +252,13 @@ def summarize_by_trader(scored, horizons):
 
         summary["horizon"] = h
 
-        # Cross-sectional suspicion score.
-        # Higher = more likely to be directionally informed.
-        # We combine:
-        # - directional edge per quantity
-        # - directional hit rate
-        # - log sample size, so a tiny lucky sample does not dominate too much
+        '''
+        Cross-sectional suspicion score, higher = more likely to be directionally informed
+        We combine:
+        - directional edge per quantity
+        - directional hit rate
+        - log sample size, so a tiny lucky sample does not dominate too much
+        '''
         for col in ["directional_edge_per_qty", "directional_hit_rate"]:
             std = summary[col].std(ddof=0)
             if std == 0 or pd.isna(std):
@@ -336,14 +309,11 @@ def summarize_by_trader_product(scored, horizons):
 
     return pd.concat(summaries, ignore_index=True)
 
-
+'''
+Produce a compact candidate table, flagging traders who rank well by directional score across several horizons
+This intentionally does not rely only on total PnL-like edge
+'''
 def flag_potential_insiders(trader_summary, min_trades=MIN_TRADES_FOR_FLAG):
-    """
-    Produce a compact candidate table.
-
-    We flag traders who rank well by directional score across several horizons.
-    This intentionally does not rely only on total PnL-like edge.
-    """
     eligible = trader_summary[trader_summary["trades"] >= min_trades].copy()
 
     if eligible.empty:
@@ -374,11 +344,7 @@ def flag_potential_insiders(trader_summary, min_trades=MIN_TRADES_FOR_FLAG):
 
     return final.reset_index()
 
-
-# ============================================================
-# Optional pattern tables
-# ============================================================
-
+# Other potential patterns
 def quantity_pattern_table(scored):
     """Shows whether a trader repeatedly uses a distinctive quantity."""
     return (
@@ -405,10 +371,7 @@ def counterparty_table(scored, candidate_trader=None):
     )
 
 
-# ============================================================
 # Output and plotting
-# ============================================================
-
 def save_outputs(
     scored,
     trader_summary,
@@ -464,7 +427,7 @@ def save_outputs(
     plt.savefig(os.path.join(output_dir, f"execution_edge_h{main_horizon}.png"), dpi=150)
     plt.close()
 
-
+# Summary
 def print_console_summary(prices, trades, trader_summary, trader_product_summary, flagged, horizons):
     print("\nLoaded data")
     print("-" * 60)
@@ -561,7 +524,6 @@ def main():
 
     zip_path = args.zip_path
     if not os.path.exists(zip_path):
-        # Helpful when running inside a notebook / ChatGPT sandbox.
         alt_path = os.path.join("/mnt/data", os.path.basename(zip_path))
         if os.path.exists(alt_path):
             zip_path = alt_path
