@@ -8,38 +8,34 @@ class Trader:
         "HYDROGEL_PACK": 200,
         "VELVETFRUIT_EXTRACT": 200,
     }
-
-    # HYDROGEL_PACK parameters
-    # Same as previous safer setup: fixed fair + extreme-only taking.
+    
+    # Same as previous setup: fixed fair + extreme-only taking
     HYDROGEL_FAIR = 9990.8
     HYDROGEL_EDGE = 31.94 * 0.9
     HYDROGEL_MAX_TAKE_SIZE = 100
 
-    # VELVETFRUIT_EXTRACT parameters
-    # Base logic remains fixed fair + extreme-only taking.
+    # Base logic remains fixed fair + extreme-only taking
     VELVETFRUIT_FAIR = 5250.1
     VELVETFRUIT_EDGE = 15.63 * 1.4
     VELVETFRUIT_MAX_TAKE_SIZE = 100
 
-    # Counterparty signal
-    # Round 4 exposes buyer/seller IDs. Historical scan suggests Mark 67 is the
-    # most useful VELVETFRUIT_EXTRACT directional counterparty.
+    # Round 4 exposes buyer/seller IDs. Analysis suggests Mark 67 is the
+    # most useful VELVETFRUIT_EXTRACT directional counterparty
     INFORMED_TRADER = "Mark 67"
 
-    # Keep this signal short-lived because we only see market_trades after they
-    # happened. It should bias us, not completely override the main strategy.
+    # Keep this signal short-lived because we only see market_trades after they happened
+    # It should bias us, not completely override the main strategy
     MARK67_DECAY = 0.70
     MARK67_SIGNAL_CAP = 40.0
     MARK67_SIGNAL_TO_FAIR_BIAS = 0.20
     MARK67_MAX_FAIR_BIAS = 4.0
 
-    # If Mark 67 was recently buying, avoid selling too easily against him.
-    # This does not ban sells; it just requires a more expensive bid before we sell.
+    # If Mark 67 was recently buying, make it more difficult to sell against him
     MARK67_SELL_BLOCK_SIGNAL = 5.0
     MARK67_SELL_BLOCK_EXTRA_EDGE = 6.0
 
-    # Small optional follow trade when Mark 67's signal is fresh and the ask is
-    # still close to fair. This is intentionally small because the signal is lagged.
+    # Small follow trade when Mark 67's signal is fresh and the ask is still close to fair
+    # This is intentionally small because the signal is lagged
     MARK67_EXTRA_BUY_SIGNAL = 5.0
     MARK67_EXTRA_BUY_SIZE = 50
     MARK67_MAX_CHASE_ABOVE_FAIR = 3.0
@@ -74,9 +70,7 @@ class Trader:
         })
         return result, conversions, traderData
 
-    # ------------------------------------------------------------------
-    # traderData helpers
-    # ------------------------------------------------------------------
+
     def decode_trader_data(self, trader_data: str) -> Dict[str, Any]:
         if not trader_data:
             return {}
@@ -94,22 +88,17 @@ class Trader:
         except Exception:
             return ""
 
-    # ------------------------------------------------------------------
-    # Counterparty signal
-    # ------------------------------------------------------------------
+    '''
+    Counterparty signal
+    Positive signal = Mark 67 recently bought VELVETFRUIT_EXTRACT
+    Negative signal = Mark 67 recently sold VELVETFRUIT_EXTRACT
+    '''
     def update_mark67_velvet_signal(
         self,
         state: TradingState,
         data: Dict[str, Any],
     ) -> float:
-        """
-        Positive signal = Mark 67 recently bought VELVETFRUIT_EXTRACT.
-        Negative signal = Mark 67 recently sold VELVETFRUIT_EXTRACT.
-
-        In the historical Round 4 data, Mark 67 mostly appears as a buyer, so
-        the practical effect is mainly: buy slightly more / avoid shorting too
-        easily after Mark 67 buys.
-        """
+ 
         old_signal = float(data.get("mark67_velvet_signal", 0.0))
         signal = old_signal * self.MARK67_DECAY
 
@@ -130,22 +119,19 @@ class Trader:
 
         return signal
 
-    # ------------------------------------------------------------------
-    # Product logic
-    # ------------------------------------------------------------------
+    '''
+    HYDROGEL logic:
+    1. Use a fixed fair value around the historical average
+    2. Buy only extreme cheap asks below fair - edge
+    3. Sell only extreme expensive bids above fair + edge
+    '''
     def trade_hydrogel(
         self,
         state: TradingState,
         product: str,
         order_depth: OrderDepth,
     ) -> List[Order]:
-        """
-        HYDROGEL logic:
-        1. Use a fixed fair value around the historical average.
-        2. Buy only extreme cheap asks below fair - edge.
-        3. Sell only extreme expensive bids above fair + edge.
-        4. No counterparty overlay for Hydrogel.
-        """
+
         return self.trade_extreme_mean_reversion(
             state=state,
             product=product,
@@ -155,6 +141,13 @@ class Trader:
             max_take_size=self.HYDROGEL_MAX_TAKE_SIZE,
         )
 
+    '''
+    VELVETFRUIT logic:
+    1. Start with the old fixed-fair extreme-only strategy
+    2. Adjust fair value slightly using Mark 67's recent flow
+    3. If Mark 67 recently bought, require a higher bid before selling
+    4. If Mark 67 recently bought and best ask is still close to fair, take a small extra buy
+    '''
     def trade_velvetfruit(
         self,
         state: TradingState,
@@ -162,14 +155,7 @@ class Trader:
         order_depth: OrderDepth,
         mark67_signal: float,
     ) -> List[Order]:
-        """
-        VELVETFRUIT logic:
-        1. Start with the old fixed-fair extreme-only strategy.
-        2. Adjust fair value slightly using Mark 67's recent flow.
-        3. If Mark 67 recently bought, require a higher bid before selling.
-        4. If Mark 67 recently bought and best ask is still close to fair, take
-           a small extra buy.
-        """
+
         fair_bias = self.clip(
             mark67_signal * self.MARK67_SIGNAL_TO_FAIR_BIAS,
             -self.MARK67_MAX_FAIR_BIAS,
@@ -200,9 +186,7 @@ class Trader:
             extra_buy_size=extra_buy_size,
         )
 
-    # ------------------------------------------------------------------
-    # Shared execution logic
-    # ------------------------------------------------------------------
+
     def trade_extreme_mean_reversion(
         self,
         state: TradingState,
@@ -215,17 +199,7 @@ class Trader:
         extra_buy_threshold: Optional[float] = None,
         extra_buy_size: int = 0,
     ) -> List[Order]:
-        """
-        Shared extreme-only mean reversion logic.
-
-        Main trades:
-        - Buy asks below fair - edge.
-        - Sell bids above fair + edge.
-
-        Optional Mark 67 overlay for Velvetfruit:
-        - small extra buy if best ask is still near fair after Mark 67 buying;
-        - require a higher sell threshold after Mark 67 buying.
-        """
+        
         orders: List[Order] = []
 
         limit = self.LIMITS[product]
@@ -255,7 +229,6 @@ class Trader:
                 sell_capacity -= qty
                 buy_capacity += qty
 
-        # 1) Take clearly cheap asks.
         bought_from_extreme = False
         for ask_price, ask_volume in sorted(order_depth.sell_orders.items()):
             if buy_capacity <= 0:
@@ -269,8 +242,6 @@ class Trader:
             else:
                 break
 
-        # 2) Small Mark 67 follow-buy, but only if we did not already buy from
-        # an extreme ask and the best ask is still close to fair.
         if (
             extra_buy_threshold is not None
             and extra_buy_size > 0
@@ -282,7 +253,6 @@ class Trader:
             if best_ask <= extra_buy_threshold:
                 add_buy(best_ask, min(-best_ask_volume, extra_buy_size))
 
-        # 3) Hit clearly expensive bids.
         for bid_price, bid_volume in sorted(order_depth.buy_orders.items(), reverse=True):
             if sell_capacity <= 0:
                 break
