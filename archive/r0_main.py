@@ -5,8 +5,8 @@ import json
 
 class Trader:
     POSITION_LIMITS = {
-        "EMERALDS": 100,   # replace if your round uses a different limit
-        "TOMATOES": 100,   # replace if your round uses a different limit
+        "EMERALDS": 80,   
+        "TOMATOES": 80,  
     }
 
     EMERALDS_FAIR_VALUE = 10000
@@ -20,9 +20,6 @@ class Trader:
         print("traderData: " + state.traderData)
         print("Observations: " + str(state.observations))
 
-        # ----------------------------
-        # Load traderData safely
-        # ----------------------------
         if state.traderData:
             try:
                 prev_data = json.loads(state.traderData)
@@ -31,15 +28,8 @@ class Trader:
         else:
             prev_data = {}
 
-        # traderData format:
-        # {
-        #   "price_history": {
-        #       "TOMATOES": [....]
-        #   }
-        # }
         price_history = prev_data.get("price_history", {})
 
-        # backward compatibility with old format {"TOMATOES": current_mid}
         if "TOMATOES" not in price_history:
             old_tomato = prev_data.get("TOMATOES")
             if isinstance(old_tomato, (int, float)):
@@ -69,10 +59,9 @@ class Trader:
                 current_mid = best_bid
             elif best_ask is not None:
                 current_mid = best_ask
+                
 
-            # ============================================================
             # EMERALDS: fixed fair value + market making
-            # ============================================================
             if product == "EMERALDS":
                 acceptable_price = 10000
                 position = state.position.get(product, 0)
@@ -84,7 +73,6 @@ class Trader:
                 print(f"{product} acceptable price: {acceptable_price}")
                 print(f"Position: {position}, Buy cap: {buy_capacity}, Sell cap: {sell_capacity}")
             
-                # 1. Take all asks below fair value
                 for ask_price in sorted(order_depth.sell_orders.keys()):
                     if buy_capacity <= 0:
                         break
@@ -99,7 +87,6 @@ class Trader:
                     else:
                         break
             
-                # 2. Take all bids above fair value
                 for bid_price in sorted(order_depth.buy_orders.keys(), reverse=True):
                     if sell_capacity <= 0:
                         break
@@ -114,7 +101,6 @@ class Trader:
                     else:
                         break
             
-                # 3. Market make only if the book still straddles fair value
                 if (
                     best_bid is not None
                     and best_ask is not None
@@ -136,9 +122,8 @@ class Trader:
                             print("MM SELL", f"{qty}x", sell_quote)
                             orders.append(Order(product, sell_quote, -qty))
 
-            # ============================================================
+            
             # TOMATOES: 10-tick moving average
-            # ============================================================
             elif product == "TOMATOES":
                 tomato_history = price_history.get("TOMATOES", [])
 
@@ -159,7 +144,6 @@ class Trader:
                 )
 
                 if acceptable_price is not None:
-                    # Buy asks below MA
                     for ask_price in sorted(order_depth.sell_orders.keys()):
                         if buy_capacity <= 0:
                             break
@@ -174,7 +158,6 @@ class Trader:
                         else:
                             break
 
-                    # Sell bids above MA
                     for bid_price in sorted(order_depth.buy_orders.keys(), reverse=True):
                         if sell_capacity <= 0:
                             break
@@ -188,10 +171,7 @@ class Trader:
                                 sell_capacity -= qty
                         else:
                             break
-
-            # ============================================================
-            # Other products: do nothing
-            # ============================================================
+                            
             else:
                 print(f"{product}: no strategy")
                 pass
