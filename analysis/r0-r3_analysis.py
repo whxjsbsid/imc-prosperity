@@ -5,9 +5,6 @@ import matplotlib.pyplot as plt
 
 zip_path = "ROUND_1.zip"
 
-# -------------------------
-# Load all CSVs from the zip
-# -------------------------
 all_prices = []
 all_trades = []
 
@@ -36,9 +33,8 @@ print("Trades columns:", trades.columns.tolist())
 print("Products in prices:", prices["product"].unique())
 print("Products in trades:", trades["symbol"].unique())
 
-# -------------------------
+
 # Make sure relevant columns are numeric
-# -------------------------
 price_numeric_cols = [
     "timestamp",
     "bid_price_1", "bid_volume_1",
@@ -55,10 +51,8 @@ for col in trade_numeric_cols:
     if col in trades.columns:
         trades[col] = pd.to_numeric(trades[col], errors="coerce")
 
-# -------------------------
+
 # Clean invalid rows
-# These 0 mid-price rows are usually missing order book snapshots
-# -------------------------
 invalid_mask = (
     prices["mid_price"].isna() |
     prices["bid_price_1"].isna() |
@@ -73,9 +67,6 @@ print(f"\nRemoved {removed_rows} invalid price rows out of {len(prices)} total r
 
 prices_clean = prices.loc[~invalid_mask].copy()
 
-# -------------------------
-# Derived columns
-# -------------------------
 prices_clean["spread"] = prices_clean["ask_price_1"] - prices_clean["bid_price_1"]
 
 top_vol_sum = prices_clean["bid_volume_1"] + prices_clean["ask_volume_1"]
@@ -84,14 +75,10 @@ prices_clean["imbalance"] = (
     top_vol_sum.replace(0, pd.NA)
 )
 
-# -------------------------
-# Product list
-# -------------------------
 products = prices_clean["product"].dropna().unique()
 
-# -------------------------
+
 # Summary stats by product
-# -------------------------
 for product in products:
     df = prices_clean[prices_clean["product"] == product].copy()
 
@@ -106,9 +93,8 @@ for product in products:
     print("\nMost common mid prices")
     print(df["mid_price"].value_counts().head(10))
 
-# -------------------------
-# Summary stats by product AND source file
-# -------------------------
+
+# Summary stats by product and source file
 for product in products:
     df = prices_clean[prices_clean["product"] == product].copy()
 
@@ -122,9 +108,8 @@ for product in products:
         print("Spread summary")
         print(group["spread"].describe())
 
-# -------------------------
+
 # Plot cleaned mid price by day/file
-# -------------------------
 for product in products:
     df = prices_clean[prices_clean["product"] == product].copy()
 
@@ -140,9 +125,9 @@ for product in products:
     plt.tight_layout()
     plt.show()
 
-# -------------------------
+
+
 # Plot cleaned spread by day/file
-# -------------------------
 for product in products:
     df = prices_clean[prices_clean["product"] == product].copy()
 
@@ -158,9 +143,8 @@ for product in products:
     plt.tight_layout()
     plt.show()
 
-# -------------------------
+
 # Trade summaries
-# -------------------------
 trade_products = trades["symbol"].dropna().unique()
 
 for product in trade_products:
