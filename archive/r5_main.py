@@ -4,7 +4,7 @@ from typing import List, Dict, Any, Optional
 
 
 class Trader:
-    # Round 5: every listed product has position limit 10.
+    # Round 5: every listed product has position limit 10
     DEFAULT_LIMIT = 10
 
     LIMITS = {
@@ -60,7 +60,7 @@ class Trader:
         "SNACKPACK_RASPBERRY": 10,
     }
 
-    # Pair-sum strategies.
+    # Pair-sum strategies
     PAIR_SUM_CONFIGS = [
         {
             "key": "snack_pist_straw_extreme",
@@ -71,11 +71,13 @@ class Trader:
             "max_take_size": 10,
         },
     ]
-
-    # Pebbles basket strategy.
-    # Historical data suggests the 5 Pebbles mids sum to roughly a stable basket.
-    # Direct basket trades are rare because spread is wide, so this is extreme-only
-    # and small-size by default.
+    
+    '''
+    Pebbles basket strategy
+    Historical data suggests the 5 Pebbles mids sum to roughly a stable basket
+    Direct basket trades are rare because spread is wide, so this is extreme-only
+    and small-size by default
+    '''
     PEBBLE_BASKET_PRODUCTS = [
         "PEBBLES_XS",
         "PEBBLES_S",
@@ -89,10 +91,12 @@ class Trader:
     PEBBLE_BASKET_CLOSE_EDGE = 2.0
     PEBBLE_BASKET_MAX_TAKE_SIZE = 10
     PEBBLE_BASKET_ALLOW_SHORT = True
-
-    # One-tick jump reversal strategies.
-    # If mid jumps up by threshold, sell the best bid.
-    # If mid drops by threshold, buy the best ask.
+    
+    '''
+    One-tick jump reversal strategies
+    If mid jumps up by threshold, sell the best bid
+    If mid drops by threshold, buy the best ask
+    '''
     ONE_TICK_REVERSION_CONFIGS = {
         "ROBOT_DISHES": {
             "threshold": 32.0,
@@ -145,7 +149,6 @@ class Trader:
     }
 
     def bid(self):
-        # Ignored outside the bidding round, but safe to leave here.
         return 3000
 
     def run(self, state: TradingState):
@@ -160,8 +163,8 @@ class Trader:
         if "prev_mids" not in data or not isinstance(data.get("prev_mids"), dict):
             data["prev_mids"] = {}
 
-        # planned_position tracks worst-case position after all orders sent this
-        # tick. This prevents strategies from jointly breaching position limits.
+        # planned_position tracks worst-case position after all orders sent this tick
+        # This prevents strategies from jointly breaching position limits
         planned_position: Dict[str, int] = {}
         for product in state.order_depths:
             planned_position[product] = int(state.position.get(product, 0))
@@ -201,9 +204,7 @@ class Trader:
         traderData = self.encode_trader_data(data)
         return result, conversions, traderData
 
-    # ------------------------------------------------------------------
     # traderData helpers
-    # ------------------------------------------------------------------
     def decode_trader_data(self, trader_data: str) -> Dict[str, Any]:
         if not trader_data:
             return {}
@@ -221,9 +222,7 @@ class Trader:
         except Exception:
             return ""
 
-    # ------------------------------------------------------------------
     # Strategy logic
-    # ------------------------------------------------------------------
     def trade_pair_sum(
         self,
         state: TradingState,
@@ -237,13 +236,12 @@ class Trader:
         edge: float,
         max_take_size: int,
     ) -> None:
-        """
-        Rolling pair-sum relative value.
-
+        '''
+        Rolling pair-sum relative value
         If p1 + p2 is normally stable, then:
         - fair(p1) = rolling_mean(p1 + p2) - mid(p2)
         - fair(p2) = rolling_mean(p1 + p2) - mid(p1)
-        """
+        '''
         if p1 not in state.order_depths or p2 not in state.order_depths:
             return
 
@@ -293,20 +291,18 @@ class Trader:
         planned_position: Dict[str, int],
         data: Dict[str, Any],
     ) -> None:
-        """
-        Extreme-only 5-leg Pebbles basket.
-
+        '''
+        Extreme-only 5-leg Pebbles basket
         Basket idea:
         PEBBLES_XS + PEBBLES_S + PEBBLES_M + PEBBLES_L + PEBBLES_XL
-        tends to stay close to a stable rolling sum.
-
+        tends to stay close to a stable rolling sum
         Execution idea:
         - If the sum of best asks is far below rolling basket fair, buy 1 basket.
         - If we already hold a long basket and the sum of best bids recovers,
           sell 1 basket to flatten.
         - Optional short basket is disabled by default because historical direct
           bid-side opportunities were much rarer.
-        """
+        '''
         products = self.PEBBLE_BASKET_PRODUCTS
         if any(product not in state.order_depths for product in products):
             return
@@ -347,7 +343,7 @@ class Trader:
         long_basket_units = min(max(0, planned_position.get(product, 0)) for product in products)
         short_basket_units = min(max(0, -planned_position.get(product, 0)) for product in products)
 
-        # 1) If an existing long basket can be sold near fair, flatten first.
+        # If an existing long basket can be sold near fair, flatten first
         if long_basket_units > 0 and bid_sum >= basket_mean - self.PEBBLE_BASKET_CLOSE_EDGE:
             qty = self.get_equal_basket_sell_quantity(
                 products=products,
@@ -365,7 +361,7 @@ class Trader:
                         quantity=qty,
                     )
 
-        # 2) If the whole basket is offered cheaply, buy all 5 legs equally.
+        # If the whole basket is offered cheaply, buy all 5 legs equally
         elif ask_sum <= basket_mean - self.PEBBLE_BASKET_OPEN_EDGE:
             qty = self.get_equal_basket_buy_quantity(
                 products=products,
@@ -383,7 +379,7 @@ class Trader:
                         quantity=qty,
                     )
 
-        # 3) Optional short basket. Disabled by default.
+        # Optional short basket
         elif self.PEBBLE_BASKET_ALLOW_SHORT and bid_sum >= basket_mean + self.PEBBLE_BASKET_OPEN_EDGE:
             qty = self.get_equal_basket_sell_quantity(
                 products=products,
@@ -433,12 +429,11 @@ class Trader:
         threshold: float,
         max_take_size: int,
     ) -> None:
-        """
-        One-tick jump reversal.
-
-        - large up move from previous tick -> short the best bid;
-        - large down move from previous tick -> buy the best ask.
-        """
+        '''
+        One-tick jump reversal
+        - large up move from previous tick -> short the best bid
+        - large down move from previous tick -> buy the best ask
+        '''
         if product not in state.order_depths:
             return
 
@@ -473,9 +468,8 @@ class Trader:
 
         prev_mids[product] = mid
 
-    # ------------------------------------------------------------------
+
     # Shared execution logic
-    # ------------------------------------------------------------------
     def trade_around_fair(
         self,
         state: TradingState,
@@ -493,7 +487,6 @@ class Trader:
         buy_threshold = fair_value - edge
         sell_threshold = fair_value + edge
 
-        # 1) Take clearly cheap asks.
         for ask_price, ask_volume in sorted(order_depth.sell_orders.items()):
             if ask_price < buy_threshold:
                 qty_available = abs(int(ask_volume))
@@ -507,7 +500,6 @@ class Trader:
             else:
                 break
 
-        # 2) Hit clearly expensive bids.
         for bid_price, bid_volume in sorted(order_depth.buy_orders.items(), reverse=True):
             if bid_price > sell_threshold:
                 qty_available = abs(int(bid_volume))
@@ -629,9 +621,7 @@ class Trader:
             qty = min(qty, int(visible_volumes.get(product, 0)), int(sell_capacity))
         return int(max(0, qty))
 
-    # ------------------------------------------------------------------
     # Market data helpers
-    # ------------------------------------------------------------------
     def get_mid_price(self, order_depth: OrderDepth) -> Optional[float]:
         if len(order_depth.buy_orders) == 0 or len(order_depth.sell_orders) == 0:
             return None
