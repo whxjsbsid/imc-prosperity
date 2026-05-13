@@ -10,7 +10,7 @@ Algorithmic trading system developed to compete in IMC's simulated exchange.
 
 ## Results
 - Achieved consistent profitability across multiple simulated rounds
-- Placed #55 out of 18803 teams globally
+- Placed #65 out of 18803 teams globally in the algorithmic trading category (#55 overall)
 
 ## Repository Structure
 - `analysis/`: research and strategy identification
